@@ -1,8 +1,8 @@
 name: FACT
 channels:
   - pytorch
-  - nvidia
   - defaults
+  - nvidia
   - conda-forge
   - https://repo.anaconda.com/pkgs/main
   - https://repo.anaconda.com/pkgs/r
@@ -19,7 +19,7 @@ dependencies:
   - bzip2=1.0.8=hda65f42_8
   - ca-certificates=2026.1.4=hbd8a1cb_0
   - cairo=1.18.4=he90730b_1
-  - certifi=2026.01.04=py310h06a4308_0
+  - certifi=2026.1.4=pyhd8ed1ab_0
   - charset-normalizer=3.4.4=pyhd8ed1ab_0
   - colorama=0.4.6=pyhd8ed1ab_1
   - contourpy=1.3.2=py310h3788b33_0
@@ -60,6 +60,7 @@ dependencies:
   - idna=3.11=pyhd8ed1ab_0
   - intel-openmp=2022.1.0=h9e868ea_3769
   - jinja2=3.1.6=pyhcf101f3_1
+  - joblib=1.5.3=pyhd8ed1ab_0
   - keyutils=1.6.3=hb9d3cd8_0
   - kiwisolver=1.4.9=py310haaf941d_2
   - krb5=1.21.3=h659f571_0
@@ -169,6 +170,7 @@ dependencies:
   - qt6-main=6.10.1=hb82b983_4
   - readline=8.3=h853b02a_0
   - requests=2.32.5=pyhcf101f3_1
+  - scikit-learn=1.7.2=py310h228f341_0
   - scipy=1.15.2=py310h1d65ade_0
   - seaborn=0.13.2=hd8ed1ab_3
   - seaborn-base=0.13.2=pyhd8ed1ab_3
@@ -177,6 +179,7 @@ dependencies:
   - soupsieve=2.8.1=pyhd8ed1ab_0
   - statsmodels=0.14.6=py310hf779ad0_0
   - sympy=1.14.0=pyh2585a3b_105
+  - threadpoolctl=3.6.0=pyhecae5ae_0
   - tk=8.6.13=noxft_ha0e22de_103
   - torchaudio=2.5.1=py310_cu118
   - torchtriton=3.1.0=py310
