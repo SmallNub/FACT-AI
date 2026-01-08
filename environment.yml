@@ -1,8 +1,8 @@
 name: FACT
 channels:
   - pytorch
-  - defaults
   - nvidia
+  - defaults
   - conda-forge
   - https://repo.anaconda.com/pkgs/main
   - https://repo.anaconda.com/pkgs/r
@@ -12,6 +12,8 @@ dependencies:
   - alsa-lib=1.2.15.1=hb03c661_0
   - backports.zstd=1.3.0=py310h69bd2ac_0
   - beautifulsoup4=4.14.3=pyha770c72_0
+  - binutils_impl_linux-64=2.45=default_hfdba357_105
+  - binutils_linux-64=2.28.1=he4fe6c7_1
   - blas=1.0=mkl
   - brotli=1.2.0=hed03a55_1
   - brotli-bin=1.2.0=hb03c661_1
@@ -19,22 +21,65 @@ dependencies:
   - bzip2=1.0.8=hda65f42_8
   - ca-certificates=2026.1.4=hbd8a1cb_0
   - cairo=1.18.4=he90730b_1
-  - certifi=2026.1.4=pyhd8ed1ab_0
+  - certifi=2026.01.04=py310h06a4308_0
   - charset-normalizer=3.4.4=pyhd8ed1ab_0
   - colorama=0.4.6=pyhd8ed1ab_1
   - contourpy=1.3.2=py310h3788b33_0
   - cpython=3.10.19=py310hd8ed1ab_2
+  - cuda-cccl=13.1.78=hc9befe2_0
+  - cuda-cccl_linux-64=13.1.78=0
+  - cuda-command-line-tools=11.8.0=0
+  - cuda-compiler=13.1.0=ha63b06e_0
+  - cuda-crt-dev_linux-64=13.1.80=0
+  - cuda-crt-tools=13.1.80=0
+  - cuda-ctadvisor=13.1.80=h3b4bcfc_1
   - cuda-cudart=11.8.89=0
+  - cuda-cudart-dev=11.8.89=0
+  - cuda-cudart-dev_linux-64=13.1.80=hbe36340_0
+  - cuda-cudart-static_linux-64=13.1.80=hbe36340_0
+  - cuda-cudart_linux-64=13.1.80=h61a3acf_0
+  - cuda-cuobjdump=13.1.80=h6205011_0
   - cuda-cupti=11.8.87=0
+  - cuda-cuxxfilt=13.1.80=h6205011_0
+  - cuda-documentation=12.4.127=0
+  - cuda-driver-dev=13.1.80=h3b4bcfc_0
+  - cuda-driver-dev_linux-64=13.1.80=hbe36340_0
+  - cuda-gdb=13.1.68=h3b4bcfc_0
   - cuda-libraries=11.8.0=0
+  - cuda-libraries-dev=12.6.2=0
+  - cuda-memcheck=11.8.86=0
+  - cuda-nsight=13.1.68=h39186ea_0
+  - cuda-nvcc=13.1.80=h959976e_0
+  - cuda-nvcc-dev_linux-64=13.1.80=0
+  - cuda-nvcc-impl=13.1.80=hbe36340_0
+  - cuda-nvcc-tools=13.1.80=h3b4bcfc_0
+  - cuda-nvcc_linux-64=13.1.80=h27567d6_0
+  - cuda-nvdisasm=13.1.80=h6205011_0
+  - cuda-nvml-dev=13.1.68=h34f9132_0
+  - cuda-nvprof=12.4.127=0
+  - cuda-nvprune=13.1.80=h6205011_0
   - cuda-nvrtc=11.8.89=0
+  - cuda-nvrtc-dev=11.8.89=0
   - cuda-nvtx=11.8.86=0
+  - cuda-nvvm-dev_linux-64=13.1.80=0
+  - cuda-nvvm-impl=13.1.80=h9f10756_0
+  - cuda-nvvm-tools=13.1.80=h9f10756_0
+  - cuda-nvvp=12.4.127=0
+  - cuda-opencl=13.1.80=h3b4bcfc_0
+  - cuda-opencl-dev=13.1.80=h3b4bcfc_0
+  - cuda-profiler-api=13.1.80=hf49826d_0
   - cuda-runtime=11.8.0=0
+  - cuda-sanitizer-api=13.1.75=h3b2e0c5_0
+  - cuda-tileiras=13.1.80=h3b4bcfc_0
+  - cuda-toolkit=11.8.0=0
+  - cuda-tools=11.8.0=0
   - cuda-version=13.1=hd92462c_3
+  - cuda-visual-tools=12.6.2=0
   - cycler=0.12.1=pyhcf101f3_2
   - cyrus-sasl=2.1.28=hd9c7081_0
   - dbus=1.16.2=h24cb091_1
   - double-conversion=3.4.0=hecca717_0
+  - expat=2.7.3=h3385a95_0
   - ffmpeg=4.4.0=hca11adc_2
   - filelock=3.20.2=pyhd8ed1ab_0
   - font-ttf-dejavu-sans-mono=2.37=hab24e00_0
@@ -46,12 +91,17 @@ dependencies:
   - fonts-conda-forge=1=hc364b38_1
   - fonttools=4.61.1=py310h3406613_0
   - freetype=2.14.1=ha770c72_0
+  - gcc_impl_linux-64=15.2.0=h36674fd_7
+  - gcc_linux-64=15.2.0=h1ca4c6b_12
   - gdown=5.2.0=pyhd8ed1ab_1
+  - gds-tools=1.16.0.49=hcbabc2f_0
   - giflib=5.2.2=hd590300_0
   - gmp=6.3.0=hac33072_2
   - gmpy2=2.2.1=py310h63ebcad_2
   - gnutls=3.6.13=h85f3911_1
   - graphite2=1.3.14=hecca717_2
+  - gxx_impl_linux-64=15.2.0=h6e002af_7
+  - gxx_linux-64=15.2.0=h94d4220_12
   - h2=4.3.0=pyhcf101f3_0
   - harfbuzz=12.3.0=h6083320_0
   - hpack=4.1.0=pyhd8ed1ab_0
@@ -61,6 +111,7 @@ dependencies:
   - intel-openmp=2022.1.0=h9e868ea_3769
   - jinja2=3.1.6=pyhcf101f3_1
   - joblib=1.5.3=pyhd8ed1ab_0
+  - kernel-headers_linux-64=4.18.0=h3108a97_1
   - keyutils=1.6.3=hb9d3cd8_0
   - kiwisolver=1.4.9=py310haaf941d_2
   - krb5=1.21.3=h659f571_0
@@ -76,12 +127,18 @@ dependencies:
   - libclang-cpp21.1=21.1.8=default_h99862b1_1
   - libclang13=21.1.8=default_h746c552_1
   - libcublas=11.11.3.6=0
+  - libcublas-dev=11.11.3.6=0
   - libcufft=10.9.0.58=0
+  - libcufft-dev=10.9.0.58=0
   - libcufile=1.16.0.49=h3b4bcfc_0
+  - libcufile-dev=1.16.0.49=hcbabc2f_0
   - libcups=2.3.3=hb8b1518_5
   - libcurand=10.4.1.34=h5dabb87_0
+  - libcurand-dev=10.4.1.34=h5dabb87_0
   - libcusolver=11.4.1.48=0
+  - libcusolver-dev=11.4.1.48=0
   - libcusparse=11.7.5.86=0
+  - libcusparse-dev=11.7.5.86=0
   - libdeflate=1.25=h17f619e_0
   - libdrm=2.4.125=hb03c661_1
   - libedit=3.1.20250104=pl5321h7949ede_0
@@ -91,6 +148,7 @@ dependencies:
   - libfreetype=2.14.1=ha770c72_0
   - libfreetype6=2.14.1=h73754d4_0
   - libgcc=15.2.0=he0feb66_16
+  - libgcc-devel_linux-64=15.2.0=hcb64138_107
   - libgcc-ng=15.2.0=h69a702a_16
   - libgfortran=15.2.0=h69a702a_16
   - libgfortran5=15.2.0=h68bc16d_16
@@ -105,15 +163,25 @@ dependencies:
   - libllvm21=21.1.8=hf7376ad_0
   - liblzma=5.8.1=hb9d3cd8_2
   - libnpp=11.8.0.86=0
+  - libnpp-dev=11.8.0.86=0
   - libnsl=2.0.1=hb9d3cd8_1
   - libntlm=1.8=hb9d3cd8_0
+  - libnvfatbin=13.1.80=h6205011_0
+  - libnvfatbin-dev=13.1.80=h6205011_0
+  - libnvjitlink=13.1.80=h6205011_0
+  - libnvjitlink-dev=13.1.80=h6205011_0
   - libnvjpeg=11.9.0.86=0
+  - libnvjpeg-dev=11.9.0.86=0
+  - libnvptxcompiler-dev=13.1.80=0
+  - libnvptxcompiler-dev_linux-64=13.1.80=0
   - libopengl=1.7.0=ha4b6fd6_2
   - libpciaccess=0.18=hb9d3cd8_0
   - libpng=1.6.53=h421ea60_0
   - libpq=18.1=hb80d175_3
+  - libsanitizer=15.2.0=h56912e6_7
   - libsqlite=3.51.1=hf4e2dac_1
   - libstdcxx=15.2.0=h934c35e_16
+  - libstdcxx-devel_linux-64=15.2.0=hcb64138_107
   - libstdcxx-ng=15.2.0=hdf11a46_16
   - libtiff=4.7.1=h9d88235_1
   - libuuid=2.41.3=h5347b49_0
@@ -124,6 +192,7 @@ dependencies:
   - libxcb=1.17.0=h8a09558_0
   - libxcrypt=4.4.36=hd590300_1
   - libxkbcommon=1.13.1=hca5e8e5_0
+  - libxkbfile=1.1.0=hf54ef8a_2
   - libxml2=2.15.1=he237659_1
   - libxml2-16=2.15.1=hca6bf5a_1
   - libxslt=1.1.43=h711ed8c_1
@@ -141,7 +210,12 @@ dependencies:
   - ncurses=6.5=h2d0b736_3
   - nettle=3.6=he412f7d_0
   - networkx=3.4.2=pyh267e887_2
+  - nsight-compute=2025.4.0.12=hdc9f5c9_0
+  - nspr=4.37=h8459abe_0
+  - nss=3.117=h3135ca0_0
   - numpy=2.2.6=py310hefbff90_0
+  - ocl-icd=2.3.3=h47b2149_0
+  - opencl-headers=2025.07.22=hfb20e49_0
   - openh264=2.1.1=h4ff587b_0
   - openjpeg=2.5.4=h55fea9a_0
   - openldap=2.6.10=he970967_0
@@ -177,8 +251,10 @@ dependencies:
   - setuptools=80.9.0=pyhff2d567_0
   - six=1.17.0=pyhe01879c_1
   - soupsieve=2.8.1=pyhd8ed1ab_0
+  - sqlite=3.51.1=he0a8d7e_0
   - statsmodels=0.14.6=py310hf779ad0_0
   - sympy=1.14.0=pyh2585a3b_105
+  - sysroot_linux-64=2.28=h3108a97_1
   - threadpoolctl=3.6.0=pyhecae5ae_0
   - tk=8.6.13=noxft_ha0e22de_103
   - torchaudio=2.5.1=py310_cu118
@@ -216,6 +292,7 @@ dependencies:
   - xorg-libxrender=0.9.12=hb9d3cd8_0
   - xorg-libxtst=1.2.5=hb9d3cd8_3
   - xorg-libxxf86vm=1.1.6=hb9d3cd8_0
+  - xorg-xorgproto=2024.1=h5eee18b_1
   - yaml=0.2.5=h280c20c_3
   - zlib=1.3.1=hb9d3cd8_2
   - zlib-ng=2.3.2=hceb46e0_1
