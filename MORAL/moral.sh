@@ -8,13 +8,13 @@
 #SBATCH --cpus-per-task=9
 #SBATCH --ntasks=1
 
-set -euo pipefail
-
 module purge
 module load 2024
 module load Anaconda3/2024.06-1
 
 source activate FACT
+
+set -euo pipefail
 
 srun python main.py --fair_model moral --model gae --dataset credit --device cuda:0 --epochs 500
 srun python main.py --fair_model moral --model gae --dataset german --device cuda:0 --epochs 500
