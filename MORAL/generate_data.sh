@@ -3,7 +3,7 @@
 #SBATCH --output=generate_data_%j.log
 #SBATCH --error=generate_data_%j.err
 #SBATCH --time=2:00:00
-#SBATCH --partition=cpu
+#SBATCH --partition=rome
 #SBATCH --cpus-per-task=9
 #SBATCH --ntasks=1
 
