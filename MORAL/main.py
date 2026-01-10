@@ -133,23 +133,28 @@ def run_single(args: argparse.Namespace, run: int) -> None:
         logger.warning("Unexpected data type returned by get_dataset; skipping ranking export.")
         return
 
-    pi = (
-        F.one_hot(data.y[data.edge_index].sum(0).long(), num_classes=3).float().sum(0)
-        / data.edge_index.shape[1]
-    ).cpu().numpy()
-
-    K = 1000
-    final_output = torch.zeros(size=(K,))
-    final_labels = torch.zeros(size=(K,))
-    output_positions = generate_array_greedy_dkl(K, pi)
-
+    # FIX 1: Compute pi from test edges (not all edges in data.edge_index)
+    # FIX 2: Use sens (sensitive attributes) not data.y (labels)
     test_split = splits["test"]
     test_edges = torch.cat([test_split["edge"], test_split["edge_neg"]], dim=0)
     test_labels = torch.cat(
         [torch.ones(test_split["edge"].size(0)), torch.zeros(test_split["edge_neg"].size(0))],
         dim=0,
     )
+    
+    # Compute edge sensitive groups from sens
     edge_sens_groups = sens[test_edges].sum(dim=1)
+    
+    # Now compute pi from these actual test edge groups
+    pi = (
+        F.one_hot(edge_sens_groups.long(), num_classes=3).float().sum(0)
+        / len(edge_sens_groups)
+    ).cpu().numpy()
+
+    K = 1000
+    final_output = torch.zeros(size=(K,))
+    final_labels = torch.zeros(size=(K,))
+    output_positions = generate_array_greedy_dkl(K, pi)
 
     for sens_value in range(3):
         mask = output_positions == sens_value
