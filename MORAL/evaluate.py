@@ -1,7 +1,3 @@
-"""
-Evaluate MORAL fairness and performance metrics from final ranking files.
-"""
-
 import argparse
 import glob
 import numpy as np
