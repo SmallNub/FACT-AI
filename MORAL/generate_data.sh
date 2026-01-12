@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=generate_data
-#SBATCH --output=generate_data_%j.log
-#SBATCH --error=generate_data_%j.err
+#SBATCH --output=slurm/generate_data_%j.log
+#SBATCH --error=slurm/generate_data_%j.err
 #SBATCH --time=2:00:00
 #SBATCH --partition=rome
 #SBATCH --cpus-per-task=9

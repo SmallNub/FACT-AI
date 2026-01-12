@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import argparse
 import random
 from pathlib import Path
@@ -127,7 +128,8 @@ def run_single(args: argparse.Namespace, run: int) -> None:
     outputs = model.predict().cpu()
 
     run_suffix = f"{args.dataset}_{args.fair_model.upper()}_{args.model.upper()}_{run}"
-    torch.save(outputs, f"three_classifiers_{run_suffix}.pt")
+    os.makedirs("results", exist_ok=True)
+    torch.save(outputs, os.path.join("results", f"three_classifiers_{run_suffix}.pt"))
 
     if not isinstance(data, Data):
         logger.warning("Unexpected data type returned by get_dataset; skipping ranking export.")
@@ -141,10 +143,10 @@ def run_single(args: argparse.Namespace, run: int) -> None:
         [torch.ones(test_split["edge"].size(0)), torch.zeros(test_split["edge_neg"].size(0))],
         dim=0,
     )
-    
+
     # Compute edge sensitive groups from sens
     edge_sens_groups = sens[test_edges].sum(dim=1)
-    
+
     # Now compute pi from these actual test edge groups
     pi = (
         F.one_hot(edge_sens_groups.long(), num_classes=3).float().sum(0)
@@ -170,7 +172,7 @@ def run_single(args: argparse.Namespace, run: int) -> None:
         final_output[mask] = group_outputs[: mask.sum()]
         final_labels[mask] = group_labels[: mask.sum()]
 
-    torch.save((final_output, final_labels), f"three_classifiers_{run_suffix}_final_ranking.pt")
+    torch.save((final_output, final_labels), os.path.join("results", f"three_classifiers_{run_suffix}_final_ranking.pt"))
     logger.success(f"Finished run {run + 1}/{args.runs}")
 
 

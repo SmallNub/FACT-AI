@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=moral_train
-#SBATCH --output=moral_train_%j.log
-#SBATCH --error=moral_train_%j.err
+#SBATCH --output=slurm/moral_train_%j.log
+#SBATCH --error=slurm/moral_train_%j.err
 #SBATCH --time=12:00:00
 #SBATCH --partition=gpu_a100
 #SBATCH --gpus=1
