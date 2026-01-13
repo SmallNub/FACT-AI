@@ -1,75 +1,116 @@
-"""
-Test if generated data works with MORAL's get_dataset function
-"""
-
+import torch
+import numpy as np
 import sys
 from pathlib import Path
 
-# Add utils to path
-sys.path.append('.')
+sys.path.append(".")
+from generate_data import load_raw_dataset, create_moral_splits
 
-try:
-    from utils import get_dataset
-except ImportError:
-    print("Error: Could not import get_dataset from utils.py")
-    sys.exit(1)
-
-def test_dataset(dataset_name: str, splits_dir: Path = Path("data/splits")):
-    """Test if a dataset loads correctly"""
-    print(f"\nTesting dataset: {dataset_name}")
-    print("-" * 40)
+def analyze_distribution(dataset_name):
+    print(f"\n{'='*60}")
+    print(f"Analyzing distribution for: {dataset_name}")
+    print('='*60)
     
-    try:
-        # This will use the exact same code path as MORAL
-        adj, features, idx_train, idx_val, idx_test, labels, sens, sens_idx, data, splits = get_dataset(
-            dataset=dataset_name,
-            splits_dir=splits_dir
-        )
+    raw = load_raw_dataset(dataset_name)
+    sens = raw["sens"]
+    num_nodes = raw["features"].shape[0]
+    all_edges = torch.sparse_coo_tensor(
+        raw["adj"].coalesce().indices(),
+        raw["adj"].coalesce().values(),
+        raw["adj"].coalesce().size()
+    )
+    
+    edges_coo = all_edges.coalesce().indices()
+    mask = edges_coo[0] != edges_coo[1]
+    all_edges = edges_coo[:, mask]
+    
+    splits, _ = create_moral_splits(all_edges, sens, num_nodes)
+    
+    def compute_edge_group_distribution(edges, sens):
+        if len(edges) == 0:
+            return np.array([0, 0, 0])
         
-        print(f"✓ Successfully loaded {dataset_name}")
-        print(f"  Adjacency shape: {adj.shape}")
-        print(f"  Features shape: {features.shape}")
-        print(f"  Labels shape: {labels.shape}")
-        print(f"  Sensitive attributes shape: {sens.shape}")
-        print(f"  Train/Val/Test splits: {idx_train.shape[0]}/{idx_val.shape[0]}/{idx_test.shape[0]}")
+        if torch.is_tensor(edges):
+            edges_np = edges.cpu().numpy()
+        else:
+            edges_np = edges
         
-        # Check splits
-        print(f"  Edge splits - Train: {splits['train']['edge'].shape}")
-        print(f"                 Valid: {splits['valid']['edge'].shape}")
-        print(f"                 Test: {splits['test']['edge'].shape}")
+        if edges_np.ndim == 2 and edges_np.shape[0] == 2:
+            edges_np = edges_np.T
         
-        return True
+        groups = []
+        for u, v in edges_np:
+            s_u = sens[u].item() if torch.is_tensor(sens) else sens[u]
+            s_v = sens[v].item() if torch.is_tensor(sens) else sens[v]
+            groups.append(s_u + s_v)
         
-    except Exception as e:
-        print(f"✗ Failed to load {dataset_name}: {str(e)}")
-        return False
-
-def main():
-    datasets = ["facebook", "gplus", "german", "nba", "pokec_n", "pokec_z", "credit"]
-    splits_dir = Path("data/splits")
+        counts = np.bincount(groups, minlength=3)
+        return counts / len(edges_np)
     
-    if not splits_dir.exists():
-        print(f"Error: Splits directory not found: {splits_dir}")
-        print("Run generate_data.py first to create the data files.")
-        return
+    all_edges_np = all_edges.cpu().numpy().T if all_edges.shape[0] == 2 else all_edges.cpu().numpy()
+    all_dist = compute_edge_group_distribution(all_edges_np, sens)
     
-    print("Testing MORAL data compatibility...")
-    print("=" * 60)
+    train_pos_dist = compute_edge_group_distribution(splits["train"]["edge"], sens)
+    train_neg_dist = compute_edge_group_distribution(splits["train"]["edge_neg"], sens)
     
-    success_count = 0
-    for dataset in datasets:
-        success = test_dataset(dataset, splits_dir)
-        if success:
-            success_count += 1
+    val_pos_dist = compute_edge_group_distribution(splits["valid"]["edge"], sens)
+    val_neg_dist = compute_edge_group_distribution(splits["valid"]["edge_neg"], sens)
     
-    print("\n" + "=" * 60)
-    print(f"Results: {success_count}/{len(datasets)} datasets loaded successfully")
+    test_pos_dist = compute_edge_group_distribution(splits["test"]["edge"], sens)
+    test_neg_dist = compute_edge_group_distribution(splits["test"]["edge_neg"], sens)
     
-    if success_count == len(datasets):
-        print("\n✓ All datasets are ready for MORAL!")
-        print("You can now run: python main.py --dataset [name]")
+    print("\nOriginal graph distribution:")
+    print(f"  Group 0 (E_s'·s'): {all_dist[0]:.4f}")
+    print(f"  Group 1 (E_s'·s):  {all_dist[1]:.4f}")
+    print(f"  Group 2 (E_s·s):   {all_dist[2]:.4f}")
+    
+    print("\nTraining split:")
+    print(f"  Positive edges: [{train_pos_dist[0]:.4f}, {train_pos_dist[1]:.4f}, {train_pos_dist[2]:.4f}]")
+    print(f"  Negative edges: [{train_neg_dist[0]:.4f}, {train_neg_dist[1]:.4f}, {train_neg_dist[2]:.4f}]")
+    
+    print("\nValidation split:")
+    print(f"  Positive edges: [{val_pos_dist[0]:.4f}, {val_pos_dist[1]:.4f}, {val_pos_dist[2]:.4f}]")
+    print(f"  Negative edges: [{val_neg_dist[0]:.4f}, {val_neg_dist[1]:.4f}, {val_neg_dist[2]:.4f}]")
+    
+    print("\nTest split:")
+    print(f"  Positive edges: [{test_pos_dist[0]:.4f}, {test_pos_dist[1]:.4f}, {test_pos_dist[2]:.4f}]")
+    print(f"  Negative edges: [{test_neg_dist[0]:.4f}, {test_neg_dist[1]:.4f}, {test_neg_dist[2]:.4f}]")
+    
+    all_dists = [train_pos_dist, train_neg_dist, val_pos_dist, val_neg_dist, test_pos_dist, test_neg_dist]
+    
+    print("\nDistribution differences from original:")
+    max_diff = 0
+    for i, (name, dist) in enumerate([
+        ("train_pos", train_pos_dist),
+        ("train_neg", train_neg_dist),
+        ("val_pos", val_pos_dist),
+        ("val_neg", val_neg_dist),
+        ("test_pos", test_pos_dist),
+        ("test_neg", test_neg_dist)
+    ]):
+        diff = np.abs(dist - all_dist)
+        max_diff_i = np.max(diff)
+        max_diff = max(max_diff, max_diff_i)
+        print(f"  {name:10s}: max diff = {max_diff_i:.4f} at groups {np.where(diff == max_diff_i)[0]}")
+    
+    print(f"\nMaximum difference from original: {max_diff:.4f}")
+    
+    if max_diff < 0.01:
+        print("✓ Distribution preserved well (differences < 1%)")
+    elif max_diff < 0.05:
+        print("✓ Distribution reasonably preserved (differences < 5%)")
     else:
-        print("\n⚠ Some datasets failed. Check the errors above.")
+        print("✗ Distribution NOT well preserved")
+
+def test_all_datasets():
+    datasets = ["facebook", "german", "nba", "pokec_n", "pokec_z", "credit"]
+    
+    for dataset in datasets:
+        try:
+            analyze_distribution(dataset)
+        except Exception as e:
+            print(f"\nError analyzing {dataset}: {e}")
+            continue
 
 if __name__ == "__main__":
-    main()
+    test_all_datasets()
