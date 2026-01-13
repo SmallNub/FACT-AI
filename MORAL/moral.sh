@@ -2,7 +2,7 @@
 #SBATCH --job-name=moral_train
 #SBATCH --output=slurm/moral_train_%j.log
 #SBATCH --error=slurm/moral_train_%j.err
-#SBATCH --time=12:00:00
+#SBATCH --time=24:00:00
 #SBATCH --partition=gpu_a100
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=9

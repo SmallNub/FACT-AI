@@ -20,6 +20,9 @@ from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset
 from torch_geometric.nn import GCNConv, GINConv, SAGEConv
 
+import os
+from utils import log_system_usage
+
 NUM_GROUPS = 3
 
 
@@ -258,7 +261,15 @@ class MORAL(nn.Module):
 
             dataset = EdgeLabelDataset(edges[mask], labels[mask])
             batch = len(dataset) if self.batch_size <= 0 else self.batch_size
-            loader = DataLoader(dataset, batch_size=batch, shuffle=shuffle, drop_last=False)
+
+            loader = DataLoader(
+                dataset,
+                batch_size=batch,
+                shuffle=shuffle,
+                drop_last=False,
+                pin_memory=True,
+            )
+
             loaders.append(loader)
         return loaders
 
@@ -344,6 +355,8 @@ class MORAL(nn.Module):
                 else:
                     logger.info(f"Epoch {epoch} | train={train_loss:.4f} | valid={val_loss:.4f}")
 
+                log_system_usage(logger)
+
         if best_state is not None:
             self.load_state_dict(best_state)
             self.best_state = best_state
@@ -390,6 +403,7 @@ class MORAL(nn.Module):
             equality = (pred[idx_s0_y1].mean() - pred[idx_s1_y1].mean()).abs()
 
         return float(parity.item()), float(equality.item())
+
 
 class MORAL_FULL(nn.Module):
     """Main MORAL model.
@@ -497,7 +511,15 @@ class MORAL_FULL(nn.Module):
             else:
                 dataset = EdgeLabelDataset(edges, labels)
             batch = len(dataset) if self.batch_size <= 0 else self.batch_size
-            loader = DataLoader(dataset, batch_size=batch, shuffle=shuffle, drop_last=False)
+
+            loader = DataLoader(
+                dataset,
+                batch_size=batch,
+                shuffle=shuffle,
+                drop_last=False,
+                pin_memory=True,
+            )
+
             loaders.append(loader)
         return loaders
 
@@ -534,7 +556,7 @@ class MORAL_FULL(nn.Module):
                     mask = sens == group
                     if mask.sum() == 0:
                         continue
-                
+
                     edges = edges[mask]
                     labels = labels[mask]
 
@@ -592,6 +614,8 @@ class MORAL_FULL(nn.Module):
                 else:
                     logger.info(f"Epoch {epoch} | train={train_loss:.4f} | valid={val_loss:.4f}")
 
+                log_system_usage(logger)
+
         if best_state is not None:
             self.load_state_dict(best_state)
             self.best_state = best_state
@@ -638,4 +662,3 @@ class MORAL_FULL(nn.Module):
             equality = (pred[idx_s0_y1].mean() - pred[idx_s1_y1].mean()).abs()
 
         return float(parity.item()), float(equality.item())
-

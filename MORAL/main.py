@@ -101,7 +101,7 @@ def run_single(args: argparse.Namespace, run: int) -> None:
 
     labels = labels.cpu()
     sens = sens.cpu()
-    
+
     if not args.full_graph:
         model = MORAL(
             adj=adj,
