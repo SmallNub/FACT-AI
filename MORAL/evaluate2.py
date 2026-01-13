@@ -30,19 +30,41 @@ def evaluate():
 
     for ds in datasets:
         try:
-            _, _, _, _, _, _, sens, _, _, splits = get_dataset(ds, splits_dir)
-            test_edges = splits["test"]["edge"]
+            adj, features, idx_train, idx_val, idx_test, labels, sens, sens_idx, data, splits = get_dataset(ds, splits_dir)
             
             if torch.is_tensor(sens):
                 sens_np = sens.cpu().numpy().astype(np.int64)
             else:
                 sens_np = np.array(sens).astype(np.int64)
             
-            test_edges_np = test_edges.cpu().numpy().astype(np.int64)
-            edge_sens_groups = sens_np[test_edges_np[:, 0]] + sens_np[test_edges_np[:, 1]]
+            if adj.is_sparse:
+                edge_coo = adj.coalesce()
+                rows = edge_coo.indices()[0].cpu().numpy()
+                cols = edge_coo.indices()[1].cpu().numpy()
+            else:
+                adj_np = adj.cpu().numpy()
+                rows, cols = np.where(adj_np > 0)
             
+            mask = rows != cols
+            rows = rows[mask]
+            cols = cols[mask]
+            
+            edges = []
+            for u, v in zip(rows, cols):
+                if u < v:
+                    edges.append([u, v])
+                else:
+                    edges.append([v, u])
+            
+            edges = np.unique(np.array(edges), axis=0)
+            
+            edge_sens_groups = sens_np[edges[:, 0]] + sens_np[edges[:, 1]]
             counts = np.bincount(edge_sens_groups, minlength=3)
             target_dist = counts / len(edge_sens_groups)
+            
+            test_edges = splits["test"]["edge"]
+            test_edges_np = test_edges.cpu().numpy().astype(np.int64)
+            test_edge_sens_groups = sens_np[test_edges_np[:, 0]] + sens_np[test_edges_np[:, 1]]
 
             files = glob.glob(f"{results_dir}/*_{ds}_*_final_ranking.pt")
             method_files = {}
@@ -58,11 +80,11 @@ def evaluate():
                 p_runs, n_runs = [], []
                 for f in f_list:
                     try:
-                        scores, labels = torch.load(f)
+                        scores, labels_tensor = torch.load(f)
                         scores_np = scores.cpu().numpy()
                         idx = np.argsort(-scores_np)
-                        ranked_groups = edge_sens_groups[idx]
-                        labels_np = labels.cpu().numpy()
+                        ranked_groups = test_edge_sens_groups[idx]
+                        labels_np = labels_tensor.cpu().numpy()
                         prec_at_k = np.mean(labels_np[idx][:1000]) if len(idx) >= 1000 else np.mean(labels_np[idx])
                         p_runs.append(prec_at_k)
                         ndkl_val = calculate_ndkl(ranked_groups, target_dist)
@@ -78,7 +100,8 @@ def evaluate():
                         f"{np.mean(n_runs):.4f} ± {np.std(n_runs):.4f}",
                     ])
                     
-        except:
+        except Exception as e:
+            print(f"Error processing {ds}: {e}")
             continue
 
     if summary_data:
