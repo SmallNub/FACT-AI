@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from loguru import logger
 from torch_geometric.data import Data
 
-from moral import MORAL
+from moral import MORAL, MORAL_FULL
 from utils import get_dataset
 
 
@@ -74,6 +74,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Deprecated option kept for compatibility with older scripts.",
     )
+    parser.add_argument("--full_graph", type=bool, default=False, help="Whether to use the entire graph during training.")
     return parser.parse_args()
 
 
@@ -100,26 +101,49 @@ def run_single(args: argparse.Namespace, run: int) -> None:
 
     labels = labels.cpu()
     sens = sens.cpu()
+    
+    if not args.full_graph:
+        model = MORAL(
+            adj=adj,
+            features=features,
+            labels=labels,
+            idx_train=idx_train.long(),
+            idx_val=idx_val.long(),
+            idx_test=idx_test.long(),
+            sens=sens,
+            sens_idx=sens_idx,
+            edge_splits=splits,
+            dataset_name=args.dataset,
+            num_hidden=args.hidden_dim,
+            lr=args.lr,
+            weight_decay=args.weight_decay,
+            encoder=model_cfg["encoder"],
+            decoder=model_cfg["decoder"],
+            batch_size=args.batch_size,
+            device=args.device
+        )
 
-    model = MORAL(
-        adj=adj,
-        features=features,
-        labels=labels,
-        idx_train=idx_train.long(),
-        idx_val=idx_val.long(),
-        idx_test=idx_test.long(),
-        sens=sens,
-        sens_idx=sens_idx,
-        edge_splits=splits,
-        dataset_name=args.dataset,
-        num_hidden=args.hidden_dim,
-        lr=args.lr,
-        weight_decay=args.weight_decay,
-        encoder=model_cfg["encoder"],
-        decoder=model_cfg["decoder"],
-        batch_size=args.batch_size,
-        device=args.device,
-    )
+    else:
+        model = MORAL_FULL(
+            adj=adj,
+            features=features,
+            labels=labels,
+            idx_train=idx_train.long(),
+            idx_val=idx_val.long(),
+            idx_test=idx_test.long(),
+            sens=sens,
+            sens_idx=sens_idx,
+            edge_splits=splits,
+            dataset_name=args.dataset,
+            num_hidden=args.hidden_dim,
+            lr=args.lr,
+            weight_decay=args.weight_decay,
+            encoder=model_cfg["encoder"],
+            decoder=model_cfg["decoder"],
+            batch_size=args.batch_size,
+            device=args.device,
+            full_graph=args.full_graph
+        )
 
     logger.info("Training model…")
     model.fit(epochs=args.epochs)
