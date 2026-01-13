@@ -70,10 +70,11 @@ def ensure_n_by_2(edge_tensor: torch.Tensor) -> torch.Tensor:
 
     raise ValueError(f"Invalid edge shape: {edge_tensor.shape}")
 
-def generate_negative_edges(
+def generate_stratified_negatives(
     existing_edges: np.ndarray,
+    sens: torch.Tensor,
     num_nodes: int,
-    num_needed: int,
+    group_counts: dict,
     global_neg_set: Set[Tuple[int, int]],
     split_name: str,
 ) -> np.ndarray:
@@ -83,41 +84,45 @@ def generate_negative_edges(
             u, v = v, u
         pos_set.add((u, v))
 
-    negatives = []
+    negatives_by_group = {0: [], 1: [], 2: []}
+    total_needed = sum(group_counts.values())
+    
     attempts = 0
-    max_attempts = max(num_needed * 100, 1000000)
-
+    max_attempts = total_needed * 1000
     rng = np.random.default_rng()
 
-    while len(negatives) < num_needed and attempts < max_attempts:
-        batch_size = min(num_needed - len(negatives), 10000) * 2
-        us = rng.integers(0, num_nodes, size=batch_size)
-        vs = rng.integers(0, num_nodes, size=batch_size)
+    while any(len(negatives_by_group[g]) < group_counts[g] for g in [0, 1, 2]) and attempts < max_attempts:
+        u = rng.integers(0, num_nodes)
+        v = rng.integers(0, num_nodes)
         
-        for u, v in zip(us, vs):
-            if len(negatives) >= num_needed:
-                break
-                
-            if u == v:
-                continue
-            
-            if u > v:
-                u, v = v, u
-            
-            pair = (u, v)
-            if pair not in pos_set and pair not in global_neg_set:
-                negatives.append([u, v])
-                global_neg_set.add(pair)
+        if u == v:
+            continue
         
-        attempts += batch_size
-
-    if len(negatives) < num_needed:
-        raise RuntimeError(
-            f"Could not generate enough negative edges for {split_name} "
-            f"({len(negatives)}/{num_needed}). Graph might be too dense."
-        )
-
-    return np.array(negatives, dtype=np.int64)
+        if u > v:
+            u, v = v, u
+        
+        pair = (u, v)
+        if pair in pos_set or pair in global_neg_set:
+            continue
+        
+        s_u = sens[u].item()
+        s_v = sens[v].item()
+        group = s_u + s_v
+        
+        if len(negatives_by_group[group]) < group_counts[group]:
+            negatives_by_group[group].append([u, v])
+            global_neg_set.add(pair)
+        
+        attempts += 1
+    
+    if attempts >= max_attempts:
+        raise RuntimeError(f"Could not generate all stratified negatives for {split_name}")
+    
+    all_negatives = []
+    for g in [0, 1, 2]:
+        all_negatives.extend(negatives_by_group[g])
+    
+    return np.array(all_negatives, dtype=np.int64)
 
 def create_moral_splits(
     all_edges: torch.Tensor,
@@ -136,6 +141,10 @@ def create_moral_splits(
     train_edges_list = []
     val_edges_list = []
     test_edges_list = []
+    
+    train_counts = {0: 0, 1: 0, 2: 0}
+    val_counts = {0: 0, 1: 0, 2: 0}
+    test_counts = {0: 0, 1: 0, 2: 0}
     
     for group in [0, 1, 2]:
         group_edges = []
@@ -159,6 +168,10 @@ def create_moral_splits(
         train_edges_list.append(group_edges[:n_train])
         val_edges_list.append(group_edges[n_train:n_train + n_val])
         test_edges_list.append(group_edges[n_train + n_val:])
+        
+        train_counts[group] = n_train
+        val_counts[group] = n_val
+        test_counts[group] = n_test
     
     train_edges = np.vstack(train_edges_list) if train_edges_list else np.array([], dtype=np.int64).reshape(0, 2)
     val_edges = np.vstack(val_edges_list) if val_edges_list else np.array([], dtype=np.int64).reshape(0, 2)
@@ -170,9 +183,9 @@ def create_moral_splits(
 
     global_neg_set = set()
 
-    neg_train = generate_negative_edges(edges, num_nodes, len(train_edges), global_neg_set, "train")
-    neg_val = generate_negative_edges(edges, num_nodes, len(val_edges), global_neg_set, "val")
-    neg_test = generate_negative_edges(edges, num_nodes, len(test_edges), global_neg_set, "test")
+    neg_train = generate_stratified_negatives(edges, sens, num_nodes, train_counts, global_neg_set, "train")
+    neg_val = generate_stratified_negatives(edges, sens, num_nodes, val_counts, global_neg_set, "val")
+    neg_test = generate_stratified_negatives(edges, sens, num_nodes, test_counts, global_neg_set, "test")
 
     splits = {
         "train": {
