@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from loguru import logger
 from torch_geometric.data import Data
 
-from moral import MORAL, MORAL_FULL
+from moral import MORAL, MORAL_FULL, MORAL_SINGLE
 from efficient_moral import EfficientMORAL
 from utils import get_dataset
 
@@ -75,8 +75,9 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Deprecated option kept for compatibility with older scripts.",
     )
-    parser.add_argument("--full_graph", type=bool, default=False, help="Whether to use the entire graph during training.")
-    parser.add_argument("--efficient", type=bool, default=False, help="Whether to use the efficient MORAL variant.")
+    parser.add_argument("--full_graph", action="store_true", help="Whether to use the entire graph during training.")
+    parser.add_argument("--single_model", action="store_true", help="Whether to use a single model during training.")
+    parser.add_argument("--efficient", action="store_true", help="Whether to use the efficient MORAL variant.")
     return parser.parse_args()
 
 
@@ -105,6 +106,7 @@ def run_single(args: argparse.Namespace, run: int) -> None:
     sens = sens.cpu()
 
     if args.full_graph:
+        print("USING FULL GRAPH MORAL")
         model = MORAL_FULL(
             adj=adj,
             features=features,
@@ -125,7 +127,29 @@ def run_single(args: argparse.Namespace, run: int) -> None:
             device=args.device,
             full_graph=args.full_graph
         )
+    elif args.single_model:
+        print("USING SINGLE MODEL MORAL")
+        model = MORAL_SINGLE(
+            adj=adj,
+            features=features,
+            labels=labels,
+            idx_train=idx_train.long(),
+            idx_val=idx_val.long(),
+            idx_test=idx_test.long(),
+            sens=sens,
+            sens_idx=sens_idx,
+            edge_splits=splits,
+            dataset_name=args.dataset,
+            num_hidden=args.hidden_dim,
+            lr=args.lr,
+            weight_decay=args.weight_decay,
+            encoder=model_cfg["encoder"],
+            decoder=model_cfg["decoder"],
+            batch_size=args.batch_size,
+            device=args.device,
+        )
     elif args.efficient:
+        print("USING EFFICIENT MORAL")
         model = EfficientMORAL(
             adj=adj,
             features=features,
@@ -146,6 +170,7 @@ def run_single(args: argparse.Namespace, run: int) -> None:
             device=args.device
         )
     else:
+        print("USING REGULAR MORAL")
         model = MORAL(
             adj=adj,
             features=features,
