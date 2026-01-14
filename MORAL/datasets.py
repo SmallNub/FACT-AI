@@ -371,7 +371,7 @@ class Nba(Dataset):
                 dataset = "region_job_2"
             else:
                 dataset = None
-            sens_attr = "region"
+            sens_attr = "gender"
             predict_attr = "I_am_working_in_field"
             label_number = 500
             sens_number = 200
@@ -540,7 +540,7 @@ class Pokec_z(Dataset):
                 dataset = "region_job_2"
             else:
                 dataset = None
-            sens_attr = "Gender"
+            sens_attr = "gender"
             predict_attr = "I_am_working_in_field"
             label_number = 500
             sens_number = 200
@@ -712,7 +712,7 @@ class Pokec_n(Dataset):
                 dataset = "region_job_2"
             else:
                 dataset = None
-            sens_attr = "Gender"
+            sens_attr = "gender"
             predict_attr = "I_am_working_in_field"
             label_number = 500
             sens_number = 200
