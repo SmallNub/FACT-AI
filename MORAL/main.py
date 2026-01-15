@@ -75,7 +75,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Deprecated option kept for compatibility with older scripts.",
     )
-    parser.add_argument("--patience", type=int, default=20, help="Patience for early stopping.")
+    parser.add_argument("--patience", type=int, default=10, help="Patience for early stopping.")
     parser.add_argument("--full_graph", action="store_true", help="Whether to use the entire graph during training.")
     parser.add_argument("--single_model", action="store_true", help="Whether to use a single model during training.")
     parser.add_argument("--efficient", action="store_true", help="Whether to use the efficient MORAL variant.")

@@ -188,7 +188,7 @@ class MORAL(nn.Module):
         decoder: str = "gae",
         batch_size: int = 1024,
         device: str = "cpu",
-        patience: int = 20,
+        patience: int = 10,
     ) -> None:
         super().__init__()
 
@@ -224,6 +224,15 @@ class MORAL(nn.Module):
                 weight_decay=weight_decay,
             )
             for group in range(NUM_GROUPS)
+        ]
+        self.schedulers = [
+            torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                mode='min',
+                factor=0.5,
+                patience=patience,
+            )
+            for optimizer in self.optimizers
         ]
 
         self.train_loaders = self._build_group_loaders(edge_splits.get("train"), shuffle=True)
@@ -351,9 +360,9 @@ class MORAL(nn.Module):
 
             if epoch % 10 == 0 or epoch == 1:
                 if val_loss is None:
-                    logger.info(f"Epoch {epoch} | train={train_loss:.4f}")
+                    logger.info(f"Epoch {epoch} | train={train_loss:.4f} | lr={self.optimizers[0].param_groups[0]['lr']:.6f}")
                 else:
-                    logger.info(f"Epoch {epoch} | train={train_loss:.4f} | valid={val_loss:.4f}")
+                    logger.info(f"Epoch {epoch} | train={train_loss:.4f} | valid={val_loss:.4f} | lr={self.optimizers[0].param_groups[0]['lr']:.6f}")
 
                 log_system_usage(logger)
 
@@ -362,11 +371,15 @@ class MORAL(nn.Module):
                     best_val = val_loss
                     best_state = deepcopy(self.state_dict())
                     best_epoch = epoch
+                    bad_epochs = 0
                 else:
                     bad_epochs += 1
-                    if bad_epochs >= self.patience:
+                    if bad_epochs >= self.patience * 3:
                         logger.info(f"Early stopping at epoch {epoch}")
                         break
+
+                for scheduler in self.schedulers:
+                    scheduler.step(val_loss)
 
         if best_state is not None:
             logger.info(f"Restoring best model from epoch {best_epoch} with valid loss {best_val:.4f}")

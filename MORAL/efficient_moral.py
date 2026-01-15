@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GCNConv,GATConv
 from loguru import logger
 from utils import log_system_usage
 
@@ -9,9 +9,9 @@ class SharedGNNBackbone(nn.Module):
     def __init__(self, in_channels, hidden_channels, num_layers=2):
         super().__init__()
         self.convs = nn.ModuleList()
-        self.convs.append(GCNConv(in_channels, hidden_channels))
+        self.convs.append(GATConv(in_channels, hidden_channels))
         for _ in range(num_layers - 1):
-            self.convs.append(GCNConv(hidden_channels, hidden_channels))
+            self.convs.append(GATConv(hidden_channels, hidden_channels))
         
     def forward(self, x, edge_index, edge_weight=None):
         for conv in self.convs[:-1]:
