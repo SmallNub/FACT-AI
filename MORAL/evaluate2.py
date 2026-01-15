@@ -57,8 +57,8 @@ def calculate_equal_opportunity(scores, labels, groups, k=100):
 
 def evaluate(k=100):
     results_dir, splits_dir = "./results", "./data/splits"
-    # datasets = ["facebook", "german", "nba", "pokec_n", "pokec_z", "credit"]
-    datasets = ["facebook", "nba", "german"]
+    datasets = ["facebook", "german", "nba", "pokec_n", "pokec_z", "credit"]
+    # datasets = ["facebook"]
     summary_data = []
 
     for ds in datasets:
