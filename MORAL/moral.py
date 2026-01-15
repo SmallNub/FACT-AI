@@ -188,6 +188,7 @@ class MORAL(nn.Module):
         decoder: str = "gae",
         batch_size: int = 1024,
         device: str = "cpu",
+        patience: int = 20,
     ) -> None:
         super().__init__()
 
@@ -205,6 +206,7 @@ class MORAL(nn.Module):
         self.idx_train = idx_train
         self.idx_val = idx_val
         self.idx_test = idx_test
+        self.patience = patience
 
         self.encoders = nn.ModuleList([
             build_encoder(encoder, self.features.size(1), num_hidden).to(self.device)
@@ -338,16 +340,14 @@ class MORAL(nn.Module):
     def fit(self, epochs: int = 300) -> None:
         """Train the model and store the best validation checkpoint."""
 
+        best_epoch = 0
         best_val = float("inf")
         best_state: Optional[Dict[str, Tensor]] = None
+        bad_epochs = 0
 
         for epoch in range(1, epochs + 1):
             train_loss = self._train_epoch()
             val_loss = self._evaluate(self.valid_loaders)
-
-            if val_loss is not None and val_loss < best_val:
-                best_val = val_loss
-                best_state = deepcopy(self.state_dict())
 
             if epoch % 10 == 0 or epoch == 1:
                 if val_loss is None:
@@ -357,7 +357,19 @@ class MORAL(nn.Module):
 
                 log_system_usage(logger)
 
+            if val_loss is not None:
+                if val_loss < best_val:
+                    best_val = val_loss
+                    best_state = deepcopy(self.state_dict())
+                    best_epoch = epoch
+                else:
+                    bad_epochs += 1
+                    if bad_epochs >= self.patience:
+                        logger.info(f"Early stopping at epoch {epoch}")
+                        break
+
         if best_state is not None:
+            logger.info(f"Restoring best model from epoch {best_epoch} with valid loss {best_val:.4f}")
             self.load_state_dict(best_state)
             self.best_state = best_state
 
