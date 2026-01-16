@@ -177,7 +177,7 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
     sens = sens.cpu()
 
     if args.full_graph:
-        print("USING FULL GRAPH MORAL")
+        logger.info("USING FULL GRAPH MORAL")
         model = MORAL_FULL(
             adj=adj,
             features=features,
@@ -199,7 +199,7 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
             full_graph=args.full_graph,
         )
     elif args.single_model:
-        print("USING SINGLE MODEL MORAL")
+        logger.info("USING SINGLE MODEL MORAL")
         model = MORAL_SINGLE(
             adj=adj,
             features=features,
@@ -220,7 +220,7 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
             device=args.device,
         )
     elif args.efficient:
-        print("USING EFFICIENT MORAL")
+        logger.info("USING EFFICIENT MORAL")
         model = EfficientMORAL(
             adj=adj,
             features=features,
@@ -241,7 +241,7 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
             device=args.device,
         )
     else:
-        print("USING REGULAR MORAL")
+        logger.info("USING REGULAR MORAL")
         model = MORAL(
             adj=adj,
             features=features,

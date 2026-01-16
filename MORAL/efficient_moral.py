@@ -3,24 +3,9 @@ import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATConv, BatchNorm
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from moral import model_fit
-from loguru import logger
-from utils import log_system_usage
-
-
-class EdgeLabelDataset(Dataset):
-    """PyTorch dataset returning edge indices and binary labels."""
-
-    def __init__(self, edges: Tensor, labels: Tensor) -> None:
-        self.edges = edges.long()
-        self.labels = labels.float()
-
-    def __len__(self) -> int:
-        return int(self.edges.size(0))
-
-    def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor]:
-        return self.edges[idx], self.labels[idx]
+from moral import EdgeLabelDataset
 
 
 class SharedGNNBackbone(nn.Module):
@@ -213,8 +198,12 @@ class EfficientMORAL(nn.Module):
             patience=patience,
         )
 
-        self.train_loaders = self._build_group_loaders(edge_splits.get("train"), shuffle=True)
-        self.valid_loaders = self._build_group_loaders(edge_splits.get("valid"), shuffle=False)
+        self.train_loaders = self._build_group_loaders(
+            edge_splits.get("train"), shuffle=True
+        )
+        self.valid_loaders = self._build_group_loaders(
+            edge_splits.get("valid"), shuffle=False
+        )
 
         test_edges, test_labels = self._prepare_edges(edge_splits.get("test"))
         self.test_edges = test_edges
@@ -222,7 +211,9 @@ class EfficientMORAL(nn.Module):
 
         self.best_state = None
 
-    def _prepare_edges(self, split: Optional[Dict[str, Tensor]]) -> Tuple[Tensor, Tensor]:
+    def _prepare_edges(
+        self, split: Optional[Dict[str, Tensor]]
+    ) -> Tuple[Tensor, Tensor]:
         if split is None:
             return torch.empty(0, 2, dtype=torch.long), torch.empty(0)
 
@@ -234,14 +225,16 @@ class EfficientMORAL(nn.Module):
         )
         return edges, labels
 
-    def _build_group_loaders(self, split: Optional[Dict[str, Tensor]], shuffle: bool) -> List[Optional[DataLoader]]:
+    def _build_group_loaders(
+        self, split: Optional[Dict[str, Tensor]], shuffle: bool
+    ) -> List[Optional[DataLoader]]:
         if split is None:
             return [None] * 3
 
         edges, labels = self._prepare_edges(split)
         sens_groups = self.sens_cpu[edges].sum(dim=1)
         loaders: List[Optional[DataLoader]] = []
-        
+
         for group in range(3):
             mask = sens_groups == group
             if mask.sum() == 0:
@@ -249,7 +242,11 @@ class EfficientMORAL(nn.Module):
                 continue
 
             dataset = EdgeLabelDataset(edges[mask], labels[mask])
-            batch = len(dataset) if self.batch_size <= 0 else min(self.batch_size, len(dataset))
+            batch = (
+                len(dataset)
+                if self.batch_size <= 0
+                else min(self.batch_size, len(dataset))
+            )
 
             loader = DataLoader(
                 dataset,
@@ -259,7 +256,7 @@ class EfficientMORAL(nn.Module):
                 pin_memory=True,
             )
             loaders.append(loader)
-        
+
         return loaders
 
     def _train_epoch(self):
@@ -275,14 +272,16 @@ class EfficientMORAL(nn.Module):
 
             for edges, labels in loader:
                 self.optimizer.zero_grad()
-                
+
                 edges = edges.to(self.device)
                 labels = labels.to(self.device)
-                groups = torch.full((edges.size(0),), group, device=self.device, dtype=torch.long)
+                groups = torch.full(
+                    (edges.size(0),), group, device=self.device, dtype=torch.long
+                )
 
                 node_embeddings = self.backbone(self.features, self.edge_index)
                 scores = self.heads(node_embeddings, edges, groups)
-                
+
                 loss = self.criterion(scores, labels)
                 loss.backward()
                 self.optimizer.step()
@@ -299,22 +298,24 @@ class EfficientMORAL(nn.Module):
 
         total_loss = 0.0
         total_batches = 0
-        
+
         # Compute node embeddings once for the entire evaluation
         node_embeddings = self.backbone(self.features, self.edge_index)
 
         for group, loader in enumerate(loaders):
             if loader is None:
                 continue
-            
+
             for edges, labels in loader:
                 edges = edges.to(self.device)
                 labels = labels.to(self.device)
-                groups = torch.full((edges.size(0),), group, device=self.device, dtype=torch.long)
+                groups = torch.full(
+                    (edges.size(0),), group, device=self.device, dtype=torch.long
+                )
 
                 scores = self.heads(node_embeddings, edges, groups)
                 loss = self.criterion(scores, labels)
-                
+
                 total_loss += float(loss.item())
                 total_batches += 1
 
@@ -324,66 +325,36 @@ class EfficientMORAL(nn.Module):
 
     def fit(self, epochs=300):
         """Train the model with early stopping and learning rate scheduling."""
-        best_val = float("inf")
-        best_state = None
-        bad_epochs = 0
-
-        for epoch in range(1, epochs + 1):
-            train_loss = self._train_epoch()
-            val_loss = self._evaluate(self.valid_loaders)
-
-            if epoch % 10 == 0 or epoch == 1:
-                lr = self.optimizer.param_groups[0]["lr"]
-                if val_loss is None:
-                    logger.info(f"Epoch {epoch} | train={train_loss:.4f} | lr={lr:.6f}")
-                else:
-                    logger.info(f"Epoch {epoch} | train={train_loss:.4f} | valid={val_loss:.4f} | lr={lr:.6f}")
-                log_system_usage(logger)
-
-            if val_loss is not None:
-                self.scheduler.step(val_loss)
-                
-                if val_loss < best_val:
-                    best_val = val_loss
-                    best_state = {k: v.clone() for k, v in self.state_dict().items()}
-                    bad_epochs = 0
-                else:
-                    bad_epochs += 1
-                    if bad_epochs >= self.patience * 3:
-                        break
-
-        if best_state is not None:
-            self.load_state_dict(best_state)
-            self.best_state = best_state
+        model_fit(self, epochs)
 
     @torch.no_grad()
     def predict(self, split="test"):
         self.backbone.eval()
         self.heads.eval()
-        
+
         edge_index = self.adj.coalesce().indices()
         with torch.no_grad():
             node_emb = self.backbone(self.features, edge_index)
-        
+
         pos_edges = self.edge_splits[split]["edge"]
         neg_edges = self.edge_splits[split]["edge_neg"]
         all_edges = torch.cat([pos_edges, neg_edges], dim=0).to(self.device)
-        
+
         if len(all_edges) == 0:
             return torch.tensor([], device=self.device)
-        
+
         edge_sens = self.sens[all_edges].sum(dim=1)
-        
+
         scores = []
         batch_size = self.batch_size
-        
+
         for i in range(0, len(all_edges), batch_size):
-            batch_edges = all_edges[i:i+batch_size]
-            batch_groups = edge_sens[i:i+batch_size]
-            
+            batch_edges = all_edges[i : i + batch_size]
+            batch_groups = edge_sens[i : i + batch_size]
+
             batch_scores = self.heads(node_emb, batch_edges, batch_groups)
             scores.append(batch_scores)
-        
+
         if scores:
             return torch.cat(scores, dim=0)
         else:
@@ -396,11 +367,11 @@ class EfficientMORAL(nn.Module):
 
         # Create group loaders for prediction
         loaders = self._build_group_loaders(self.edge_splits.get(split), shuffle=False)
-        
+
         all_scores = []
         all_edges = []
         group_indices = []
-        
+
         node_embeddings = self.backbone(self.features, self.edge_index)
 
         for group, loader in enumerate(loaders):
@@ -409,22 +380,30 @@ class EfficientMORAL(nn.Module):
 
             for edges, _ in loader:
                 edges = edges.to(self.device)
-                groups = torch.full((edges.size(0),), group, device=self.device, dtype=torch.long)
-                
+                groups = torch.full(
+                    (edges.size(0),), group, device=self.device, dtype=torch.long
+                )
+
                 batch_scores = self.heads(node_embeddings, edges, groups)
-                
+
                 all_scores.append(batch_scores)
                 all_edges.append(edges)
-                group_indices.append(torch.full((edges.size(0),), group, device=self.device))
+                group_indices.append(
+                    torch.full((edges.size(0),), group, device=self.device)
+                )
 
         if all_scores:
             scores = torch.cat(all_scores, dim=0)
             edges = torch.cat(all_edges, dim=0)
             groups = torch.cat(group_indices, dim=0)
-            
+
             return scores, edges, groups
         else:
-            return torch.tensor([], device=self.device), torch.tensor([], device=self.device), torch.tensor([], device=self.device)
+            return (
+                torch.tensor([], device=self.device),
+                torch.tensor([], device=self.device),
+                torch.tensor([], device=self.device),
+            )
 
     @staticmethod
     def fair_metric(pred, labels, sens):
