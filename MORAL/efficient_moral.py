@@ -1,33 +1,98 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv,GATConv
+from torch_geometric.nn import GCNConv,GATConv, BatchNorm
 from loguru import logger
 from utils import log_system_usage
 
+from torch_geometric.nn import GATConv, BatchNorm
+import torch.nn.functional as F
+
 class SharedGNNBackbone(nn.Module):
-    def __init__(self, in_channels, hidden_channels, num_layers=2):
+    def __init__(self, in_channels, hidden_channels, num_layers=2, heads=8, dropout=0.2, residual=True, norm='batch'):
         super().__init__()
         self.convs = nn.ModuleList()
-        self.convs.append(GATConv(in_channels, hidden_channels))
-        for _ in range(num_layers - 1):
-            self.convs.append(GATConv(hidden_channels, hidden_channels))
+        self.norms = nn.ModuleList() if norm else None
+        self.dropout = nn.Dropout(dropout)
+        self.residual = residual
         
+        self.convs.append(GATConv(
+            in_channels, 
+            hidden_channels // heads,
+            heads=heads,
+            dropout=dropout,
+            add_self_loops=True,
+            edge_dim=None
+        ))
+        
+        if norm == 'batch':
+            self.norms.append(BatchNorm(hidden_channels))
+        elif norm == 'layer':
+            self.norms.append(nn.LayerNorm(hidden_channels))
+        
+        for i in range(num_layers - 2):
+            self.convs.append(GATConv(
+                hidden_channels,
+                hidden_channels // heads,
+                heads=heads,
+                dropout=dropout,
+                add_self_loops=True,
+                edge_dim=None
+            ))
+            if self.norms is not None:
+                if norm == 'batch':
+                    self.norms.append(BatchNorm(hidden_channels))
+                elif norm == 'layer':
+                    self.norms.append(nn.LayerNorm(hidden_channels))
+        
+        self.convs.append(GATConv(
+            hidden_channels,
+            hidden_channels,
+            heads=1,
+            concat=False,
+            dropout=dropout,
+            add_self_loops=True,
+            edge_dim=None
+        ))
+        
+        self.skip_proj = nn.Linear(in_channels, hidden_channels) if in_channels != hidden_channels else None
+    
     def forward(self, x, edge_index, edge_weight=None):
-        for conv in self.convs[:-1]:
-            x = conv(x, edge_index, edge_weight).relu()
+        x_initial = x
+        
+        for i, conv in enumerate(self.convs[:-1]):
+            x_in = x
+            x = conv(x, edge_index, edge_weight)
+            
+            if self.norms and i < len(self.norms):
+                x = self.norms[i](x)
+            
+            x = F.elu(x)
+            x = self.dropout(x)
+            
+            if self.residual:
+                if x.shape == x_in.shape:
+                    x = x + x_in
+                elif i == 0 and self.skip_proj is not None:
+                    x = self.skip_proj(x_initial) + x
+        
         x = self.convs[-1](x, edge_index, edge_weight)
         return x
 
 class GroupSpecificHeads(nn.Module):
-    def __init__(self, hidden_channels, num_heads=3):
+    def __init__(self, hidden_channels, num_heads=3, dropout=0.1):
         super().__init__()
         self.heads = nn.ModuleList()
+        
         for _ in range(num_heads):
             head = nn.Sequential(
                 nn.Linear(hidden_channels * 2, hidden_channels),
-                nn.ReLU(),
-                nn.Linear(hidden_channels, 1)
+                nn.LayerNorm(hidden_channels),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_channels, hidden_channels // 2),
+                nn.GELU(),
+                nn.Linear(hidden_channels // 2, 1)
             )
             self.heads.append(head)
     

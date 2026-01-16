@@ -6,6 +6,7 @@ import random
 from pathlib import Path
 from typing import Dict
 
+from codecarbon import EmissionsTracker
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -14,7 +15,7 @@ from torch_geometric.data import Data
 
 from moral import MORAL, MORAL_FULL, MORAL_SINGLE
 from efficient_moral import EfficientMORAL
-from utils import get_dataset
+from utils import get_dataset, set_emissions_tracker
 
 
 def seed_everything(seed: int) -> None:
@@ -79,6 +80,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--full_graph", action="store_true", help="Whether to use the entire graph during training.")
     parser.add_argument("--single_model", action="store_true", help="Whether to use a single model during training.")
     parser.add_argument("--efficient", action="store_true", help="Whether to use the efficient MORAL variant.")
+    parser.add_argument("--track_emissions", action="store_true", help="Track carbon emissions using CodeCarbon")
+    parser.add_argument("--emissions_dir", type=str, default="./emissions", help="Directory to save emissions data")
     return parser.parse_args()
 
 
@@ -93,10 +96,13 @@ def resolve_model_config(model_name: str) -> Dict[str, str]:
         raise ValueError(f"Unsupported model '{model_name}'.") from exc
 
 
-def run_single(args: argparse.Namespace, run: int) -> None:
+def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
     seed = args.seed + run
     seed_everything(seed)
     logger.info(f"Run {run + 1}/{args.runs} — seed={seed}")
+
+    if tracker:
+        set_emissions_tracker(tracker)
 
     model_cfg = resolve_model_config(args.model)
     adj, features, idx_train, idx_val, idx_test, labels, sens, sens_idx, data, splits = get_dataset(
@@ -245,10 +251,42 @@ def run_single(args: argparse.Namespace, run: int) -> None:
 
 def main() -> None:
     args = parse_args()
+
+    tracker = None
+    if args.track_emissions:
+        try: 
+            os.makedirs(args.emissions_dir, exist_ok=True)
+            tracker = EmissionsTracker(
+                project_name=f"MORAL_{args.dataset}",
+                output_dir=args.emissions_dir,
+                log_level="ERROR",
+                measure_power_secs=10,
+                save_to_file=True,
+                output_file=f"emissions_{args.dataset}_{args.model}.csv"
+            )
+            tracker.start()
+            logger.info("Started carbon emissions tracking")
+        except Exception as e:
+            logger.warning(f"Failed to start emissions tracker: {e}")
+
     logger.info(f"Processing dataset '{args.dataset}' with model '{args.model}'.")
     for run in range(args.runs):
-        run_single(args, run)
-
+        run_single(args, run, tracker)
+    
+    if tracker:
+        emissions = tracker.stop()
+        
+        print("\n" + "="*60)
+        print("EXPERIMENT COMPLETE - CARBON EMISSIONS")
+        print("="*60)
+        print(f"Dataset: {args.dataset}")
+        print(f"Model: {args.model}")
+        print(f"Runs: {args.runs}")
+        print(f"Epochs: {args.epochs}")
+        print(f"Total CO₂ emissions: {emissions:.6f} kg")
+        print(f"Energy consumed: {tracker.final_emissions_data.energy_consumed:.4f} kWh")
+        print(f"Duration: {tracker._last_measured_time:.1f} seconds")
+        print("="*60)
 
 if __name__ == "__main__":
     main()

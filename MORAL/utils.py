@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import psutil
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Union
@@ -7,6 +8,7 @@ from typing import Dict, Optional, Tuple, Union
 import torch
 from torch import Tensor
 from torch_geometric.utils import coalesce
+from codecarbon import EmissionsTracker
 
 from datasets import Facebook, Google, German, Nba, Pokec_n, Pokec_z, Credit
 
@@ -17,6 +19,28 @@ try:
     GPU_AVAILABLE = True
 except Exception:
     GPU_AVAILABLE = False
+
+_emissions_tracker = None
+
+
+def set_emissions_tracker(tracker):
+    """Set the global emissions tracker from main.py"""
+    global _emissions_tracker
+    _emissions_tracker = tracker
+
+
+def get_current_emissions():
+    """Get current emissions in grams from the tracker."""
+    global _emissions_tracker
+    
+    if _emissions_tracker:
+        try:
+            emissions_kg = getattr(_emissions_tracker, '_total_emissions', 0.0)
+            return emissions_kg * 1000
+        except:
+            pass
+    
+    return 0.0
 
 
 def to_torch_sparse_tensor(
@@ -108,17 +132,20 @@ def get_gpu_stats():
 def log_system_usage(logger):
     cpu_mem = get_cpu_stats()
     gpu = get_gpu_stats()
-
-    msg = (
-        f"CPU: {cpu_mem['cpu_percent']:.1f}% | "
-        f"RAM: {cpu_mem['ram_used_gb']:.2f}"
-    )
-
+    
+    emissions_g = get_current_emissions()
+    
+    msg_parts = []
+    
+    msg_parts.append(f"CPU: {cpu_mem['cpu_percent']:.1f}%")
+    msg_parts.append(f"RAM: {cpu_mem['ram_used_gb']:.2f}GB")
+    
     if gpu:
-        msg += (
-            f" | GPU: {gpu['gpu_util_percent']}% | "
-            f"GPU MEM: {gpu['gpu_mem_used_gb']:.2f}/"
-            f"{gpu['gpu_mem_total_gb']:.2f} GB"
-        )
-
+        msg_parts.append(f"GPU: {gpu['gpu_util_percent']}%")
+        msg_parts.append(f"GPU-MEM: {gpu['gpu_mem_used_gb']:.1f}/{gpu['gpu_mem_total_gb']:.1f}GB")
+    
+    if _emissions_tracker:
+        msg_parts.append(f"CO₂: {emissions_g:.1f}g")
+    
+    msg = " | ".join(msg_parts)
     logger.info(msg)
