@@ -1,89 +1,107 @@
+from typing import Dict, List, Optional, Sequence, Tuple
 import torch
-import torch.nn as nn
+from torch import Tensor, nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv,GATConv, BatchNorm
-from loguru import logger
-from utils import log_system_usage
-
 from torch_geometric.nn import GATConv, BatchNorm
-import torch.nn.functional as F
+from moral import model_fit
+
 
 class SharedGNNBackbone(nn.Module):
-    def __init__(self, in_channels, hidden_channels, num_layers=2, heads=8, dropout=0.2, residual=True, norm='batch'):
+    def __init__(
+        self,
+        in_channels,
+        hidden_channels,
+        num_layers=2,
+        heads=8,
+        dropout=0.2,
+        residual=True,
+        norm="batch",
+    ):
         super().__init__()
         self.convs = nn.ModuleList()
         self.norms = nn.ModuleList() if norm else None
         self.dropout = nn.Dropout(dropout)
         self.residual = residual
-        
-        self.convs.append(GATConv(
-            in_channels, 
-            hidden_channels // heads,
-            heads=heads,
-            dropout=dropout,
-            add_self_loops=True,
-            edge_dim=None
-        ))
-        
-        if norm == 'batch':
-            self.norms.append(BatchNorm(hidden_channels))
-        elif norm == 'layer':
-            self.norms.append(nn.LayerNorm(hidden_channels))
-        
-        for i in range(num_layers - 2):
-            self.convs.append(GATConv(
-                hidden_channels,
+
+        self.convs.append(
+            GATConv(
+                in_channels,
                 hidden_channels // heads,
                 heads=heads,
                 dropout=dropout,
                 add_self_loops=True,
-                edge_dim=None
-            ))
+                edge_dim=None,
+            )
+        )
+
+        if norm == "batch":
+            self.norms.append(BatchNorm(hidden_channels))
+        elif norm == "layer":
+            self.norms.append(nn.LayerNorm(hidden_channels))
+
+        for i in range(num_layers - 2):
+            self.convs.append(
+                GATConv(
+                    hidden_channels,
+                    hidden_channels // heads,
+                    heads=heads,
+                    dropout=dropout,
+                    add_self_loops=True,
+                    edge_dim=None,
+                )
+            )
             if self.norms is not None:
-                if norm == 'batch':
+                if norm == "batch":
                     self.norms.append(BatchNorm(hidden_channels))
-                elif norm == 'layer':
+                elif norm == "layer":
                     self.norms.append(nn.LayerNorm(hidden_channels))
-        
-        self.convs.append(GATConv(
-            hidden_channels,
-            hidden_channels,
-            heads=1,
-            concat=False,
-            dropout=dropout,
-            add_self_loops=True,
-            edge_dim=None
-        ))
-        
-        self.skip_proj = nn.Linear(in_channels, hidden_channels) if in_channels != hidden_channels else None
-    
+
+        self.convs.append(
+            GATConv(
+                hidden_channels,
+                hidden_channels,
+                heads=1,
+                concat=False,
+                dropout=dropout,
+                add_self_loops=True,
+                edge_dim=None,
+            )
+        )
+
+        self.skip_proj = (
+            nn.Linear(in_channels, hidden_channels)
+            if in_channels != hidden_channels
+            else None
+        )
+
     def forward(self, x, edge_index, edge_weight=None):
         x_initial = x
-        
+
         for i, conv in enumerate(self.convs[:-1]):
             x_in = x
             x = conv(x, edge_index, edge_weight)
-            
+
             if self.norms and i < len(self.norms):
                 x = self.norms[i](x)
-            
+
             x = F.elu(x)
             x = self.dropout(x)
-            
+
             if self.residual:
                 if x.shape == x_in.shape:
                     x = x + x_in
                 elif i == 0 and self.skip_proj is not None:
                     x = self.skip_proj(x_initial) + x
-        
+
         x = self.convs[-1](x, edge_index, edge_weight)
         return x
+
 
 class GroupSpecificHeads(nn.Module):
     def __init__(self, hidden_channels, num_heads=3, dropout=0.1):
         super().__init__()
         self.heads = nn.ModuleList()
-        
+
         for _ in range(num_heads):
             head = nn.Sequential(
                 nn.Linear(hidden_channels * 2, hidden_channels),
@@ -92,50 +110,56 @@ class GroupSpecificHeads(nn.Module):
                 nn.Dropout(dropout),
                 nn.Linear(hidden_channels, hidden_channels // 2),
                 nn.GELU(),
-                nn.Linear(hidden_channels // 2, 1)
+                nn.Linear(hidden_channels // 2, 1),
             )
             self.heads.append(head)
-    
+
     def forward(self, node_embeddings, edges, groups):
         if len(edges) == 0:
             return torch.tensor([], device=node_embeddings.device)
-        
+
         u, v = edges[:, 0], edges[:, 1]
         edge_embs = torch.cat([node_embeddings[u], node_embeddings[v]], dim=-1)
-        
+
         scores = []
         for group in range(3):
-            mask = (groups == group)
+            mask = groups == group
             if mask.any():
                 group_edges = edge_embs[mask]
                 group_scores = self.heads[group](group_edges)
                 scores.append(group_scores.squeeze())
-        
-        return torch.cat(scores, dim=0) if scores else torch.tensor([], device=node_embeddings.device)
+
+        return (
+            torch.cat(scores, dim=0)
+            if scores
+            else torch.tensor([], device=node_embeddings.device)
+        )
+
 
 class EfficientMORAL(nn.Module):
     def __init__(
         self,
-        adj,
-        features,
-        labels,
-        idx_train,
-        idx_val,
-        idx_test,
-        sens,
-        sens_idx,
-        edge_splits,
-        dataset_name,
-        num_hidden=128,
-        lr=0.001,
-        weight_decay=0.0,
-        encoder="gcn",
-        decoder="gae",
-        batch_size=1024,
-        device="cpu"
-    ):
+        adj: Tensor,
+        features: Tensor,
+        labels: Tensor,
+        idx_train: Tensor,
+        idx_val: Tensor,
+        idx_test: Tensor,
+        sens: Tensor,
+        sens_idx: Tensor,
+        edge_splits: Dict[str, Dict[str, Tensor]],
+        dataset_name: str,
+        num_hidden: int = 128,
+        lr: float = 3e-4,
+        weight_decay: float = 0.0,
+        encoder: str = "gcn",
+        decoder: str = "gae",
+        batch_size: int = 1024,
+        device: str = "cpu",
+        patience: int = 10,
+    ) -> None:
         super().__init__()
-        
+
         self.device = torch.device(device)
         self.sens = sens.to(self.device)
         self.features = features.to(self.device)
@@ -143,20 +167,25 @@ class EfficientMORAL(nn.Module):
         self.edge_splits = edge_splits
         self.batch_size = batch_size
         self.criterion = nn.BCEWithLogitsLoss()
-        
+
         self.backbone = SharedGNNBackbone(
-            in_channels=features.shape[1],
-            hidden_channels=num_hidden
+            in_channels=features.shape[1], hidden_channels=num_hidden
         ).to(self.device)
-        
-        self.heads = GroupSpecificHeads(
-            hidden_channels=num_hidden,
-            num_heads=3
-        ).to(self.device)
-        
+
+        self.heads = GroupSpecificHeads(hidden_channels=num_hidden, num_heads=3).to(
+            self.device
+        )
+
         params = list(self.backbone.parameters()) + list(self.heads.parameters())
         self.optimizer = torch.optim.Adam(params, lr=lr, weight_decay=weight_decay)
-        
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode="min",
+            factor=0.5,
+            patience=patience,
+        )
+        self.patience = patience
+
         self.idx_train = idx_train
         self.idx_val = idx_val
         self.idx_test = idx_test
@@ -164,160 +193,146 @@ class EfficientMORAL(nn.Module):
         self.sens_idx = sens_idx
         self.dataset_name = dataset_name
         self.best_state = None
-        
+
     def get_edges_for_group(self, group, split="train"):
-        edges = self.edge_splits[split]["edge"]
+        edges = self.edge_splits[split]["edge"].to(self.device)
         if len(edges) == 0:
             return torch.tensor([], dtype=torch.long, device=self.device)
-        
+
         edge_sens = self.sens[edges].sum(dim=1)
-        group_mask = (edge_sens == group)
+        group_mask = edge_sens == group
         return edges[group_mask]
-    
+
     def get_negative_edges_for_group(self, group, num_needed, split="train"):
-        neg_edges = self.edge_splits[split]["edge_neg"]
+        neg_edges = self.edge_splits[split]["edge_neg"].to(self.device)
         if len(neg_edges) == 0 or num_needed == 0:
             return torch.tensor([], dtype=torch.long, device=self.device)
-        
+
         neg_edge_sens = self.sens[neg_edges].sum(dim=1)
-        neg_group_mask = (neg_edge_sens == group)
+        neg_group_mask = neg_edge_sens == group
         group_neg_edges = neg_edges[neg_group_mask]
-        
+
         if len(group_neg_edges) > num_needed:
             indices = torch.randperm(len(group_neg_edges))[:num_needed]
             return group_neg_edges[indices]
         return group_neg_edges
-    
+
     def _train_epoch(self):
         self.backbone.train()
         self.heads.train()
-        
+
         total_loss = 0.0
         total_batches = 0
-        
+
         for group in [0, 1, 2]:
             pos_edges = self.get_edges_for_group(group, "train")
             if len(pos_edges) == 0:
                 continue
-            
-            neg_edges = self.get_negative_edges_for_group(group, len(pos_edges), "train")
+
+            neg_edges = self.get_negative_edges_for_group(
+                group, len(pos_edges), "train"
+            )
             all_edges = torch.cat([pos_edges, neg_edges], dim=0)
-            labels = torch.cat([
-                torch.ones(len(pos_edges), device=self.device),
-                torch.zeros(len(neg_edges), device=self.device)
-            ])
-            groups = torch.full((len(all_edges),), group, device=self.device, dtype=torch.long)
-            
+            labels = torch.cat(
+                [
+                    torch.ones(len(pos_edges), device=self.device),
+                    torch.zeros(len(neg_edges), device=self.device),
+                ]
+            )
+            groups = torch.full(
+                (len(all_edges),), group, device=self.device, dtype=torch.long
+            )
+
             edge_index = self.adj.coalesce().indices()
             node_embeddings = self.backbone(self.features, edge_index)
             scores = self.heads(node_embeddings, all_edges, groups)
-            
+
             if len(scores) > 0:
                 loss = self.criterion(scores, labels)
-                
+
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-                
+
                 total_loss += float(loss.item())
                 total_batches += 1
-        
+
         return total_loss / max(total_batches, 1)
-    
+
     def fit(self, epochs=300):
-        best_val = float("inf")
-        best_state = None
-        
-        for epoch in range(1, epochs + 1):
-            train_loss = self._train_epoch()
-            val_loss = self._evaluate()
-            
-            if val_loss is not None and val_loss < best_val:
-                best_val = val_loss
-                best_state = {k: v.clone() for k, v in self.state_dict().items()}
-            
-            if epoch % 10 == 0 or epoch == 1:
-                if val_loss is None:
-                    logger.info(f"Epoch {epoch} | train={train_loss:.4f}")
-                else:
-                    logger.info(f"Epoch {epoch} | train={train_loss:.4f} | valid={val_loss:.4f}")
-                
-                log_system_usage(logger)
-        
-        if best_state is not None:
-            self.load_state_dict(best_state)
-            self.best_state = best_state
-    
+        model_fit(self, epochs)
+
     @torch.no_grad()
     def _evaluate(self, split="valid"):
         self.backbone.eval()
         self.heads.eval()
-        
+
         total_loss = 0.0
         total_batches = 0
-        
+
         for group in [0, 1, 2]:
             pos_edges = self.get_edges_for_group(group, split)
             if len(pos_edges) == 0:
                 continue
-            
+
             neg_edges = self.get_negative_edges_for_group(group, len(pos_edges), split)
             all_edges = torch.cat([pos_edges, neg_edges], dim=0)
-            labels = torch.cat([
-                torch.ones(len(pos_edges), device=self.device),
-                torch.zeros(len(neg_edges), device=self.device)
-            ])
-            groups = torch.full((len(all_edges),), group, device=self.device, dtype=torch.long)
-            
+            labels = torch.cat(
+                [
+                    torch.ones(len(pos_edges), device=self.device),
+                    torch.zeros(len(neg_edges), device=self.device),
+                ]
+            )
+            groups = torch.full(
+                (len(all_edges),), group, device=self.device, dtype=torch.long
+            )
+
             edge_index = self.adj.coalesce().indices()
             node_embeddings = self.backbone(self.features, edge_index)
             scores = self.heads(node_embeddings, all_edges, groups)
-            
+
             if len(scores) > 0:
                 loss = self.criterion(scores, labels)
                 total_loss += float(loss.item())
                 total_batches += 1
-        
+
         if total_batches == 0:
             return None
         return total_loss / total_batches
-    
+
     @torch.no_grad()
-    def predict(self):
-        return self._predict("test")
-    
-    def _predict(self, split="test"):
+    def predict(self, split="test"):
         self.backbone.eval()
         self.heads.eval()
-        
+
         edge_index = self.adj.coalesce().indices()
         with torch.no_grad():
             node_emb = self.backbone(self.features, edge_index)
-        
+
         pos_edges = self.edge_splits[split]["edge"]
         neg_edges = self.edge_splits[split]["edge_neg"]
         all_edges = torch.cat([pos_edges, neg_edges], dim=0).to(self.device)
-        
+
         if len(all_edges) == 0:
             return torch.tensor([], device=self.device)
-        
+
         edge_sens = self.sens[all_edges].sum(dim=1)
-        
+
         scores = []
         batch_size = self.batch_size
-        
+
         for i in range(0, len(all_edges), batch_size):
-            batch_edges = all_edges[i:i+batch_size]
-            batch_groups = edge_sens[i:i+batch_size]
-            
+            batch_edges = all_edges[i: i + batch_size]
+            batch_groups = edge_sens[i: i + batch_size]
+
             batch_scores = self.heads(node_emb, batch_edges, batch_groups)
             scores.append(batch_scores)
-        
+
         if scores:
             return torch.cat(scores, dim=0)
         else:
             return torch.tensor([], device=self.device)
-    
+
     @staticmethod
     def fair_metric(pred, labels, sens):
         idx_s0 = sens == 0

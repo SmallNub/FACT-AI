@@ -45,3 +45,4 @@ dependencies:
       - aiohttp
       - psutil
       - pynvml
+      - codecarbon

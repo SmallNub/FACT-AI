@@ -20,7 +20,6 @@ from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset
 from torch_geometric.nn import GCNConv, GINConv, SAGEConv
 
-import os
 from utils import log_system_usage
 
 NUM_GROUPS = 3
@@ -348,43 +347,7 @@ class MORAL(nn.Module):
 
     def fit(self, epochs: int = 300) -> None:
         """Train the model and store the best validation checkpoint."""
-
-        best_epoch = 0
-        best_val = float("inf")
-        best_state: Optional[Dict[str, Tensor]] = None
-        bad_epochs = 0
-
-        for epoch in range(1, epochs + 1):
-            train_loss = self._train_epoch()
-            val_loss = self._evaluate(self.valid_loaders)
-
-            if epoch % 10 == 0 or epoch == 1:
-                if val_loss is None:
-                    logger.info(f"Epoch {epoch} | train={train_loss:.4f} | lr={self.optimizers[0].param_groups[0]['lr']:.6f}")
-                else:
-                    logger.info(f"Epoch {epoch} | train={train_loss:.4f} | valid={val_loss:.4f} | lr={self.optimizers[0].param_groups[0]['lr']:.6f}")
-
-                log_system_usage(logger)
-
-            if val_loss is not None:
-                if val_loss < best_val:
-                    best_val = val_loss
-                    best_state = deepcopy(self.state_dict())
-                    best_epoch = epoch
-                    bad_epochs = 0
-                else:
-                    bad_epochs += 1
-                    if bad_epochs >= self.patience * 3:
-                        logger.info(f"Early stopping at epoch {epoch}")
-                        break
-
-                for scheduler in self.schedulers:
-                    scheduler.step(val_loss)
-
-        if best_state is not None:
-            logger.info(f"Restoring best model from epoch {best_epoch} with valid loss {best_val:.4f}")
-            self.load_state_dict(best_state)
-            self.best_state = best_state
+        model_fit(self, epochs)
 
     @torch.no_grad()
     def predict(self) -> Tensor:
@@ -428,6 +391,62 @@ class MORAL(nn.Module):
             equality = (pred[idx_s0_y1].mean() - pred[idx_s1_y1].mean()).abs()
 
         return float(parity.item()), float(equality.item())
+
+
+def model_fit(model, epochs: int = 300) -> None:
+    """Train the model and store the best validation checkpoint."""
+
+    best_epoch = 0
+    best_val = float("inf")
+    best_state: Optional[Dict[str, Tensor]] = None
+    bad_epochs = 0
+
+    for epoch in range(1, epochs + 1):
+        train_loss = model._train_epoch()
+        if hasattr(model, "valid_loaders"):
+            val_loss = model._evaluate(model.valid_loaders)
+        else:
+            val_loss = model._evaluate()
+
+        if epoch % 10 == 0 or epoch == 1:
+            if hasattr(model, "optimizers"):
+                lr = model.optimizers[0].param_groups[0]["lr"]
+            elif hasattr(model, "optimizer"):
+                lr = model.optimizer.param_groups[0]["lr"]
+            else:
+                raise ValueError("Model has no optimizer attribute.")
+
+            if val_loss is None:
+                logger.info(f"Epoch {epoch} | train={train_loss:.4f} | lr={lr:.6f}")
+            else:
+                logger.info(f"Epoch {epoch} | train={train_loss:.4f} | valid={val_loss:.4f} | lr={lr:.6f}")
+
+            log_system_usage(logger)
+
+        if val_loss is not None:
+            if val_loss < best_val:
+                best_val = val_loss
+                best_state = deepcopy(model.state_dict())
+                best_epoch = epoch
+                bad_epochs = 0
+            else:
+                bad_epochs += 1
+                if bad_epochs >= model.patience * 3:
+                    logger.info(f"Early stopping at epoch {epoch}")
+                    break
+
+            if hasattr(model, "schedulers"):
+                for scheduler in model.schedulers:
+                    scheduler.step(val_loss)
+            elif hasattr(model, "scheduler"):
+                model.scheduler.step(val_loss)
+            else:
+                raise ValueError("Model has no scheduler attribute.")
+
+    if best_state is not None:
+        logger.info(f"Restoring best model from epoch {best_epoch} with valid loss {best_val:.4f}")
+        model.load_state_dict(best_state)
+        model.best_state = best_state
 
 
 class MORAL_FULL(nn.Module):
