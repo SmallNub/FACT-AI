@@ -196,6 +196,7 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
             decoder=model_cfg["decoder"],
             batch_size=args.batch_size,
             device=args.device,
+            patience=args.patience,
             full_graph=args.full_graph,
         )
     elif args.single_model:
@@ -218,6 +219,7 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
             decoder=model_cfg["decoder"],
             batch_size=args.batch_size,
             device=args.device,
+            patience=args.patience
         )
     elif args.efficient:
         logger.info("USING EFFICIENT MORAL")
