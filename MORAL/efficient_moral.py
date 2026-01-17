@@ -3,11 +3,40 @@ import torch
 from torch import Tensor, nn
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
-from torch_geometric.nn import GATConv, BatchNorm
+import torch_geometric.nn as gnn
+from torch_geometric.nn import GATConv
+from torch_geometric.utils import dropout_node, dropout_edge
 
 from moral import model_fit
 
 NUM_GROUPS = 3
+
+
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        nn.init.kaiming_uniform_(m.weight, nonlinearity="relu")
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
+
+    elif isinstance(m, GATConv):
+        # Feature projection
+        nn.init.xavier_uniform_(m.lin.weight)
+
+        # Attention parameters
+        nn.init.xavier_uniform_(m.att_src)
+        nn.init.xavier_uniform_(m.att_dst)
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
+
+
+def standardize(tensor: Tensor) -> Tensor:
+    return (tensor - tensor.mean(dim=0, keepdim=True)) / (
+        tensor.std(dim=0, keepdim=True) + 1e-6
+    )
+
+
+def normalize(tensor: Tensor) -> Tensor:
+    return F.normalize(tensor, p=2, dim=1)
 
 
 class EdgeGroupDataset(Dataset):
@@ -20,7 +49,75 @@ class EdgeGroupDataset(Dataset):
         return self.edges.size(0)
 
     def __getitem__(self, idx):
-        return self.edges[idx], self.labels[idx], self.groups[idx]
+        return self.edges[idx][:, 0], self.edges[idx][:, 1], self.labels[idx], self.groups[idx]
+
+    def __getitems__(self, indices):
+        return (
+            self.edges[indices][:, 0],
+            self.edges[indices][:, 1],
+            self.labels[indices],
+            self.groups[indices],
+        )
+
+
+class BottleneckBlock(nn.Module):
+    def __init__(self, hidden_channels: int):
+        super().__init__()
+        bottleneck = hidden_channels // 4
+
+        self.down = nn.Sequential(
+            nn.Linear(hidden_channels, bottleneck),
+            nn.BatchNorm1d(bottleneck),
+            nn.ELU(),
+        )
+
+        self.up = nn.Sequential(
+            nn.Linear(bottleneck, hidden_channels),
+            nn.BatchNorm1d(hidden_channels),
+            nn.ELU(),
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.up(self.down(x))
+
+
+class ConvBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int, heads: int = 8, dropout: float = 0.3):
+        super().__init__()
+
+        self.conv = GATConv(
+            in_channels,
+            out_channels // heads,
+            heads=heads,
+            dropout=dropout,
+            residual=True,
+        )
+        self.norm = gnn.BatchNorm(out_channels)
+        self.act = nn.ELU()
+        self.bottleneck = BottleneckBlock(out_channels)
+        self.dropout = nn.Dropout(dropout)
+
+        self.skip_proj = (
+            nn.Linear(in_channels, out_channels)
+            if in_channels != out_channels
+            else None
+        )
+
+    def forward(self, x: Tensor, edge_index: Tensor) -> Tensor:
+        x_in = x
+
+        x = self.conv(x, edge_index)
+        x = self.norm(x)
+        x = self.act(x)
+        x = x + self.bottleneck(x)
+        x = self.dropout(x)
+
+        if self.skip_proj is not None:
+            x = x + self.skip_proj(x_in)
+        else:
+            x = x + x_in
+
+        return x
 
 
 class SharedBackbone(nn.Module):
@@ -28,64 +125,49 @@ class SharedBackbone(nn.Module):
         self,
         in_channels: int,
         hidden_channels: int,
-        num_layers: int = 2,
-        heads: int = 4,
-        dropout: float = 0.2,
+        num_layers: int = 5,
+        heads: int = 8,
+        dropout: float = 0.3,
     ):
         super().__init__()
 
         self.convs = nn.ModuleList()
-        self.norms = nn.ModuleList()
-        self.dropout = nn.Dropout(dropout)
-        self.residual = True
+        layer_sizes = [in_channels] + [hidden_channels] * (num_layers - 1)
 
-        # First layer
-        self.convs.append(GATConv(in_channels, hidden_channels // heads, heads=heads, dropout=dropout))
-        self.norms.append(BatchNorm(hidden_channels))
-
-        # Hidden layers
-        for _ in range(num_layers - 2):
-            self.convs.append(GATConv(hidden_channels, hidden_channels // heads, heads=heads, dropout=dropout))
-            self.norms.append(BatchNorm(hidden_channels))
-
-        # Final layer
-        self.convs.append(GATConv(hidden_channels, hidden_channels, heads=1, concat=False, dropout=dropout))
-        self.skip_proj = nn.Linear(in_channels, hidden_channels) if in_channels != hidden_channels else None
+        for layer_size in layer_sizes:
+            self.convs.append(
+                ConvBlock(layer_size, hidden_channels, heads, dropout)
+            )
 
     def forward(self, x: Tensor, edge_index: Tensor) -> Tensor:
-        x_initial = x
-        for i, conv in enumerate(self.convs[:-1]):
-            x_in = x
+        for conv in self.convs:
             x = conv(x, edge_index)
-            if i < len(self.norms):
-                x = self.norms[i](x)
-            x = F.elu(x)
-            x = self.dropout(x)
-            if self.residual:
-                if x.shape == x_in.shape:
-                    x = x + x_in
-                elif i == 0 and self.skip_proj is not None:
-                    x = x + self.skip_proj(x_initial)
-        x = self.convs[-1](x, edge_index)
+
+        x = standardize(x)
+        x = normalize(x)
         return x
 
 
 class GroupHeads(nn.Module):
-    def __init__(self, hidden_channels: int, num_groups: int = NUM_GROUPS):
+    def __init__(self, hidden_channels: int, num_groups: int = NUM_GROUPS, dropout: float = 0.3):
         super().__init__()
 
         self.shared = nn.Sequential(
             nn.Linear(hidden_channels * 2, hidden_channels),
-            nn.ReLU(),
+            nn.BatchNorm1d(hidden_channels),
+            nn.ELU(),
+            nn.Dropout(dropout),
             nn.Linear(hidden_channels, hidden_channels // 2),
-            nn.ReLU(),
+            nn.BatchNorm1d(hidden_channels // 2),
+            nn.ELU(),
+            nn.Dropout(dropout),
         )
 
         self.group_weight = nn.Parameter(
             torch.empty(num_groups, hidden_channels // 2, 1)
         )
         self.group_bias = nn.Parameter(torch.zeros(num_groups, 1))
-        nn.init.xavier_uniform_(self.group_weight)
+        nn.init.xavier_uniform_(self.group_weight, gain=0.5)
 
     def forward(self, node_emb: Tensor, edges: Tensor, groups: Tensor) -> Tensor:
         src, dst = edges.t()
@@ -118,10 +200,13 @@ class EfficientMORAL(nn.Module):
         self.device = torch.device(device)
         self.batch_size = batch_size
         self.patience = patience
+        self.accum_steps = 1
 
+        features = standardize(features.float())
         self.features = features.to(self.device)
+
         self.edge_index = adj.coalesce().indices().to(self.device)
-        self.sens = sens.to(self.device)
+        self.sens = sens
 
         self.backbone = SharedBackbone(
             in_channels=features.size(1),
@@ -131,18 +216,20 @@ class EfficientMORAL(nn.Module):
         self.heads = GroupHeads(num_hidden).to(self.device)
 
         self.criterion = nn.BCEWithLogitsLoss()
-        self.optimizer = torch.optim.Adam(
+        self.optimizer = torch.optim.AdamW(
             list(self.backbone.parameters()) + list(self.heads.parameters()),
             lr=lr,
             weight_decay=weight_decay,
         )
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", patience=patience
+            self.optimizer, mode="min", factor=0.5, patience=patience
         )
 
         self.train_loader = self._build_loader(edge_splits.get("train"), True)
         self.valid_loader = self._build_loader(edge_splits.get("valid"), False)
         self.test_data = self._prepare_edges(edge_splits.get("test"))
+
+        self.apply(init_weights)
 
     def _prepare_edges(self, split):
         if split is None:
@@ -152,9 +239,7 @@ class EfficientMORAL(nn.Module):
         neg = split["edge_neg"]
 
         edges = torch.cat([pos, neg], dim=0)
-        labels = torch.cat(
-            [torch.ones(pos.size(0)), torch.zeros(neg.size(0))], dim=0
-        )
+        labels = torch.cat([torch.ones(pos.size(0)), torch.zeros(neg.size(0))], dim=0)
         groups = self.sens[edges].sum(dim=1)
         return edges, labels, groups
 
@@ -175,16 +260,28 @@ class EfficientMORAL(nn.Module):
         self.backbone.train()
         self.heads.train()
 
-        node_emb = self.backbone(self.features, self.edge_index)
-
         total_loss = 0.0
         total_batches = 0
         loss_accum = 0.0
+        step_count = 0
 
-        for edges, labels, groups in self.train_loader:
+        for edges1, edges2, labels, groups in self.train_loader:
+            edges = torch.stack((edges1, edges2), dim=1).long()
             edges = edges.to(self.device)
             labels = labels.to(self.device)
             groups = groups.to(self.device)
+
+            if step_count == 0:
+                # noise = torch.randn_like(self.features) * self.features * 0.2
+                edge_index, _, _ = dropout_node(self.edge_index, p=0.1, training=self.training)
+                edge_index, _ = dropout_edge(edge_index, p=0.2, training=self.training)
+                node_emb = self.backbone(self.features, edge_index)
+
+                # with torch.no_grad():
+                #     std = node_emb.std(dim=0).mean().item()
+                #     print("Embedding mean std:", std)
+                #     cos = F.cosine_similarity(node_emb[:100], node_emb[100:200], dim=1).mean()
+                #     print("Mean cosine similarity:", cos.item())
 
             scores = self.heads(node_emb, edges, groups)
             loss = self.criterion(scores, labels)
@@ -192,13 +289,21 @@ class EfficientMORAL(nn.Module):
             loss_accum = loss_accum + loss
             total_loss += loss.item()
             total_batches += 1
+            step_count += 1
 
-        self.optimizer.zero_grad()
-        loss_accum.backward()
-        self.optimizer.step()
+            if step_count >= self.accum_steps:
+                self.optimizer.zero_grad()
+                loss_accum.backward()
+                self.optimizer.step()
+                step_count = 0
+                loss_accum = 0.0
+
+        if step_count > 0:
+            self.optimizer.zero_grad()
+            loss_accum.backward()
+            self.optimizer.step()
 
         return total_loss / total_batches
-
 
     @torch.no_grad()
     def _evaluate(self):
@@ -213,7 +318,8 @@ class EfficientMORAL(nn.Module):
         total_loss = 0.0
         total_batches = 0
 
-        for edges, labels, groups in self.valid_loader:
+        for edges1, edges2, labels, groups in self.train_loader:
+            edges = torch.stack((edges1, edges2), dim=1).long()
             edges = edges.to(self.device)
             labels = labels.to(self.device)
             groups = groups.to(self.device)

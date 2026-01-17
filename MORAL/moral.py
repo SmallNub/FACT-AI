@@ -459,7 +459,7 @@ def model_fit(model, epochs: int = 300) -> None:
                 bad_epochs = 0
             else:
                 bad_epochs += 1
-                if bad_epochs >= model.patience * 3:
+                if bad_epochs >= model.patience * 5:
                     logger.info(f"Early stopping at epoch {epoch}")
                     break
 
