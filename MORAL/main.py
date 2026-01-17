@@ -224,21 +224,19 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
         model = EfficientMORAL(
             adj=adj,
             features=features,
-            labels=labels,
-            idx_train=idx_train.long(),
-            idx_val=idx_val.long(),
-            idx_test=idx_test.long(),
+            # idx_train=idx_train.long(),
+            # idx_val=idx_val.long(),
+            # idx_test=idx_test.long(),
             sens=sens,
-            sens_idx=sens_idx,
+            # sens_idx=sens_idx,
             edge_splits=splits,
-            dataset_name=args.dataset,
+            # dataset_name=args.dataset,
             num_hidden=args.hidden_dim,
             lr=args.lr,
             weight_decay=args.weight_decay,
-            encoder=model_cfg["encoder"],
-            decoder=model_cfg["decoder"],
             batch_size=args.batch_size,
             device=args.device,
+            patience=args.patience
         )
     else:
         logger.info("USING REGULAR MORAL")
