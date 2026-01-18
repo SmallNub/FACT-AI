@@ -162,7 +162,7 @@ def mx_to_torch_sparse_tensor(sparse_mx, is_sparse=False, return_tensor_sparse=T
     )
     values = torch.from_numpy(sparse_mx.data)
     shape = torch.Size(sparse_mx.shape)
-    return torch.sparse.FloatTensor(indices, values, shape)
+    return torch.sparse_coo_tensor(indices, values, shape, dtype=torch.float32)
 
 
 class Google(Dataset):
@@ -1329,8 +1329,8 @@ class German(Dataset):
         header.remove("PurposeOfLoan")
 
         # Sensitive Attribute
-        idx_features_labels["Gender"][idx_features_labels["Gender"] == "Female"] = 1
-        idx_features_labels["Gender"][idx_features_labels["Gender"] == "Male"] = 0
+        idx_features_labels.loc[idx_features_labels["Gender"] == "Female", "Gender"] = 1
+        idx_features_labels.loc[idx_features_labels["Gender"] == "Male", "Gender"] = 0
 
         edges_unordered = np.genfromtxt(
             os.path.join(self.root, self.path_name, f"{dataset}_edges.txt")

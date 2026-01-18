@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import psutil
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Union
@@ -15,15 +14,16 @@ from datasets import Facebook, Google, German, Nba, Pokec_n, Pokec_z, Credit
 
 try:
     import pynvml
+
     pynvml.nvmlInit()
     GPU_AVAILABLE = True
 except Exception:
     GPU_AVAILABLE = False
 
-_emissions_tracker = None
+_emissions_tracker: EmissionsTracker = None
 
 
-def set_emissions_tracker(tracker):
+def set_emissions_tracker(tracker: EmissionsTracker):
     """Set the global emissions tracker from main.py"""
     global _emissions_tracker
     _emissions_tracker = tracker
@@ -32,14 +32,14 @@ def set_emissions_tracker(tracker):
 def get_current_emissions():
     """Get current emissions in grams from the tracker."""
     global _emissions_tracker
-    
+
     if _emissions_tracker:
         try:
-            emissions_kg = getattr(_emissions_tracker, '_total_emissions', 0.0)
+            emissions_kg = getattr(_emissions_tracker, "_total_emissions", 0.0)
             return emissions_kg * 1000
-        except:
+        except Exception:
             pass
-    
+
     return 0.0
 
 
@@ -61,7 +61,9 @@ def to_torch_sparse_tensor(
     if edge_attr is None:
         edge_attr = torch.ones(edge_index.size(1), device=edge_index.device)
 
-    sparse = torch.sparse_coo_tensor(edge_index, edge_attr, size=size, device=edge_index.device)
+    sparse = torch.sparse_coo_tensor(
+        edge_index, edge_attr, size=size, device=edge_index.device
+    )
     return sparse.coalesce()
 
 
@@ -99,7 +101,18 @@ def get_dataset(dataset: str, splits_dir: Union[str, Path]) -> Tuple:
     sens = dataset_obj.sens()
     sens_idx = dataset_obj.sens_idx()
 
-    return adj, features, idx_train, idx_val, idx_test, labels, sens, sens_idx, data, splits
+    return (
+        adj,
+        features,
+        idx_train,
+        idx_val,
+        idx_test,
+        labels,
+        sens,
+        sens_idx,
+        data,
+        splits,
+    )
 
 
 def get_cpu_stats():
@@ -132,20 +145,22 @@ def get_gpu_stats():
 def log_system_usage(logger):
     cpu_mem = get_cpu_stats()
     gpu = get_gpu_stats()
-    
+
     emissions_g = get_current_emissions()
-    
+
     msg_parts = []
-    
+
     msg_parts.append(f"CPU: {cpu_mem['cpu_percent']:.1f}%")
     msg_parts.append(f"RAM: {cpu_mem['ram_used_gb']:.2f}GB")
-    
+
     if gpu:
         msg_parts.append(f"GPU: {gpu['gpu_util_percent']}%")
-        msg_parts.append(f"GPU-MEM: {gpu['gpu_mem_used_gb']:.1f}/{gpu['gpu_mem_total_gb']:.1f}GB")
-    
+        msg_parts.append(
+            f"GPU-MEM: {gpu['gpu_mem_used_gb']:.1f}/{gpu['gpu_mem_total_gb']:.1f}GB"
+        )
+
     if _emissions_tracker:
         msg_parts.append(f"CO₂: {emissions_g:.1f}g")
-    
+
     msg = " | ".join(msg_parts)
     logger.info(msg)

@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--device", type=str, default="cpu", help="PyTorch device string."
     )
-    parser.add_argument("--lr", type=float, default=3e-3, help="Learning rate.")
+    parser.add_argument("--lr", type=float, default=1e-2, help="Learning rate.")
     parser.add_argument(
         "--batch_size",
         type=int,
@@ -84,7 +84,7 @@ def parse_args() -> argparse.Namespace:
         help="Hidden dimensionality of the encoders.",
     )
     parser.add_argument(
-        "--weight_decay", type=float, default=5e-4, help="Weight decay used by Adam."
+        "--weight_decay", type=float, default=1e-3, help="Weight decay used by Adam."
     )
     parser.add_argument(
         "--runs", type=int, default=3, help="Number of runs with different seeds."

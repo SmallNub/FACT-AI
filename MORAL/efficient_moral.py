@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict
 import torch
 from torch import Tensor, nn
 from torch.utils.data import Dataset, DataLoader
@@ -125,7 +125,7 @@ class SharedBackbone(nn.Module):
         self,
         in_channels: int,
         hidden_channels: int,
-        num_layers: int = 5,
+        num_layers: int = 3,
         heads: int = 8,
         dropout: float = 0.3,
     ):
@@ -220,9 +220,15 @@ class EfficientMORAL(nn.Module):
             list(self.backbone.parameters()) + list(self.heads.parameters()),
             lr=lr,
             weight_decay=weight_decay,
+            fused=True,
         )
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.5, patience=patience
+            self.optimizer,
+            mode="min",
+            factor=0.5,
+            patience=patience,
+            threshold_mode="rel",
+            threshold=1e-3,
         )
 
         self.train_loader = self._build_loader(edge_splits.get("train"), True)
@@ -230,6 +236,7 @@ class EfficientMORAL(nn.Module):
         self.test_data = self._prepare_edges(edge_splits.get("test"))
 
         self.apply(init_weights)
+        self.compile()
 
     def _prepare_edges(self, split):
         if split is None:
@@ -272,16 +279,9 @@ class EfficientMORAL(nn.Module):
             groups = groups.to(self.device)
 
             if step_count == 0:
-                # noise = torch.randn_like(self.features) * self.features * 0.2
                 edge_index, _, _ = dropout_node(self.edge_index, p=0.1, training=self.training)
                 edge_index, _ = dropout_edge(edge_index, p=0.2, training=self.training)
                 node_emb = self.backbone(self.features, edge_index)
-
-                # with torch.no_grad():
-                #     std = node_emb.std(dim=0).mean().item()
-                #     print("Embedding mean std:", std)
-                #     cos = F.cosine_similarity(node_emb[:100], node_emb[100:200], dim=1).mean()
-                #     print("Mean cosine similarity:", cos.item())
 
             scores = self.heads(node_emb, edges, groups)
             loss = self.criterion(scores, labels)
@@ -318,7 +318,7 @@ class EfficientMORAL(nn.Module):
         total_loss = 0.0
         total_batches = 0
 
-        for edges1, edges2, labels, groups in self.train_loader:
+        for edges1, edges2, labels, groups in self.valid_loader:
             edges = torch.stack((edges1, edges2), dim=1).long()
             edges = edges.to(self.device)
             labels = labels.to(self.device)
