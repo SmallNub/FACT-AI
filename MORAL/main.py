@@ -14,7 +14,7 @@ from loguru import logger
 from torch_geometric.data import Data
 
 from moral import MORAL
-from moral2 import MORAL_FULL, MORAL_SINGLE
+from moral2 import MORAL_FULL, MORAL_SINGLE, MORAL_IF
 from efficient_moral import EfficientMORAL
 from utils import get_dataset, set_emissions_tracker
 
@@ -138,6 +138,11 @@ def parse_args() -> argparse.Namespace:
         help="Whether to use the efficient MORAL variant.",
     )
     parser.add_argument(
+        "--individual",
+        action="store_true",
+        help="Whether to enforce Individual Fairness during training",
+    )
+    parser.add_argument(
         "--amp",
         action="store_true",
         help="Use automatic mixed precision (AMP) during training.",
@@ -255,6 +260,28 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
             batch_size=args.batch_size,
             device=args.device,
             patience=args.patience
+        )
+    elif args.individual:
+        logger.info("USING FULL GRAPH MORAL")
+        model = MORAL_IF(
+            adj=adj,
+            features=features,
+            labels=labels,
+            idx_train=idx_train.long(),
+            idx_val=idx_val.long(),
+            idx_test=idx_test.long(),
+            sens=sens,
+            sens_idx=sens_idx,
+            edge_splits=splits,
+            dataset_name=args.dataset,
+            num_hidden=args.hidden_dim,
+            lr=args.lr,
+            weight_decay=args.weight_decay,
+            encoder=model_cfg["encoder"],
+            decoder=model_cfg["decoder"],
+            batch_size=args.batch_size,
+            device=args.device,
+            patience=args.patience,
         )
     else:
         logger.info("USING REGULAR MORAL")
