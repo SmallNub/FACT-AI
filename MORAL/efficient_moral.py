@@ -231,7 +231,7 @@ class EfficientMORAL(nn.Module):
             threshold_mode="rel",
             threshold=1e-3,
         )
-        self.amp_enabled = self.device.type == "cuda"
+        self.amp_enabled = torch.get_float32_matmul_precision() == "medium"
         self.scaler = GradScaler(enabled=self.amp_enabled)
 
         self.train_loader = self._build_loader(edge_splits.get("train"), True)

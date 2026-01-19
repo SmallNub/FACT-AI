@@ -19,17 +19,25 @@ from efficient_moral import EfficientMORAL
 from utils import get_dataset, set_emissions_tracker
 
 
+def set_amp(enabled: bool) -> None:
+    if enabled:
+        logger.info("Using automatic mixed precision (AMP) for training.")
+        torch.backends.cudnn.deterministic = False
+        torch.backends.cudnn.benchmark = True
+        torch.set_float32_matmul_precision("medium")
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+    else:
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+
 def seed_everything(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = False
-    torch.backends.cudnn.benchmark = True
-    torch.set_float32_matmul_precision("medium")
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
 
 
 def generate_array_greedy_dkl(n: int, distribution: np.ndarray) -> torch.Tensor:
@@ -128,6 +136,11 @@ def parse_args() -> argparse.Namespace:
         "--efficient",
         action="store_true",
         help="Whether to use the efficient MORAL variant.",
+    )
+    parser.add_argument(
+        "--amp",
+        action="store_true",
+        help="Use automatic mixed precision (AMP) during training.",
     )
     parser.add_argument(
         "--track_emissions",
@@ -347,6 +360,9 @@ def main() -> None:
             logger.info("Started carbon emissions tracking")
         except Exception as e:
             logger.warning(f"Failed to start emissions tracker: {e}")
+
+    logger.info(f"Using device: {args.device}")
+    set_amp(args.amp)
 
     logger.info(f"Processing dataset '{args.dataset}' with model '{args.model}'.")
     for run in range(args.runs):
