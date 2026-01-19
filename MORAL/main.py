@@ -366,7 +366,7 @@ def main() -> None:
         print(
             f"Energy consumed: {tracker.final_emissions_data.energy_consumed:.4f} kWh"
         )
-        print(f"Duration: {tracker._last_measured_time:.1f} seconds")
+        print(f"Duration: {tracker.final_emissions_data.duration:.1f} seconds")
         print("=" * 60)
 
 
