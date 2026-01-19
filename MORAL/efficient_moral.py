@@ -203,6 +203,12 @@ class EfficientMORAL(nn.Module):
         self.patience = patience
         self.accum_steps = 1
 
+        self.logit_memory = {}
+        self.memory_momentum = 0.9
+        self.freeze_weight = 0.5
+        self.freeze_threshold = 0.75
+
+
         features = standardize(features.float())
         self.features = features.to(self.device)
 
@@ -281,6 +287,7 @@ class EfficientMORAL(nn.Module):
             labels = labels.to(self.device)
             groups = groups.to(self.device)
 
+            # --- Logit freezing: edge_index stochastic dropout ---
             if step_count == 0:
                 edge_index, _, _ = dropout_node(self.edge_index, p=0.1, training=self.training)
                 edge_index, _ = dropout_edge(edge_index, p=0.2, training=self.training)
@@ -288,10 +295,28 @@ class EfficientMORAL(nn.Module):
                 with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
                     node_emb = self.backbone(self.features, edge_index)
 
+            # --- Forward pass ---
             with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
                 scores = self.heads(node_emb, edges, groups)
                 loss = self.criterion(scores, labels)
 
+            # --- Schizophrenic Fairness Whisper ---
+            with torch.no_grad():
+                s0_mask = groups == 0
+                s1_mask = groups == 1
+
+                if s0_mask.any() and s1_mask.any():
+                    mean0 = scores[s0_mask].mean()
+                    mean1 = scores[s1_mask].mean()
+                    nudge_strength = 0.05
+                    adjustment = (mean0 - mean1) * nudge_strength
+
+                    # Avoid in-place operation
+                    scores = scores.clone()
+                    scores[s1_mask] = scores[s1_mask] + adjustment
+
+
+            # --- Gradient accumulation and scaling ---
             loss_accum = loss_accum + loss
             total_loss += loss.item()
             total_batches += 1
@@ -306,6 +331,7 @@ class EfficientMORAL(nn.Module):
                 step_count = 0
                 loss_accum = 0.0
 
+        # Catch any remaining accumulated loss
         if step_count > 0:
             loss_accum = loss_accum / step_count
             self.optimizer.zero_grad()
@@ -314,6 +340,7 @@ class EfficientMORAL(nn.Module):
             self.scaler.update()
 
         return total_loss / total_batches
+
 
     @torch.no_grad()
     def _evaluate(self):
