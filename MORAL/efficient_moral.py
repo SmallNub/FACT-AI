@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torch_geometric.nn as gnn
 from torch_geometric.nn import GATConv
 from torch_geometric.utils import dropout_node, dropout_edge
+from torch.amp import autocast, GradScaler
 
 from moral import model_fit
 
@@ -49,12 +50,12 @@ class EdgeGroupDataset(Dataset):
         return self.edges.size(0)
 
     def __getitem__(self, idx):
-        return self.edges[idx][:, 0], self.edges[idx][:, 1], self.labels[idx], self.groups[idx]
+        return self.edges[idx, 0], self.edges[idx, 1], self.labels[idx], self.groups[idx]
 
     def __getitems__(self, indices):
         return (
-            self.edges[indices][:, 0],
-            self.edges[indices][:, 1],
+            self.edges[indices, 0],
+            self.edges[indices, 1],
             self.labels[indices],
             self.groups[indices],
         )
@@ -230,6 +231,8 @@ class EfficientMORAL(nn.Module):
             threshold_mode="rel",
             threshold=1e-3,
         )
+        self.amp_enabled = self.device.type == "cuda"
+        self.scaler = GradScaler(enabled=self.amp_enabled)
 
         self.train_loader = self._build_loader(edge_splits.get("train"), True)
         self.valid_loader = self._build_loader(edge_splits.get("valid"), False)
@@ -281,10 +284,13 @@ class EfficientMORAL(nn.Module):
             if step_count == 0:
                 edge_index, _, _ = dropout_node(self.edge_index, p=0.1, training=self.training)
                 edge_index, _ = dropout_edge(edge_index, p=0.2, training=self.training)
-                node_emb = self.backbone(self.features, edge_index)
 
-            scores = self.heads(node_emb, edges, groups)
-            loss = self.criterion(scores, labels)
+                with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
+                    node_emb = self.backbone(self.features, edge_index)
+
+            with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
+                scores = self.heads(node_emb, edges, groups)
+                loss = self.criterion(scores, labels)
 
             loss_accum = loss_accum + loss
             total_loss += loss.item()
@@ -292,16 +298,20 @@ class EfficientMORAL(nn.Module):
             step_count += 1
 
             if step_count >= self.accum_steps:
+                loss_accum = loss_accum / step_count
                 self.optimizer.zero_grad()
-                loss_accum.backward()
-                self.optimizer.step()
+                self.scaler.scale(loss_accum).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
                 step_count = 0
                 loss_accum = 0.0
 
         if step_count > 0:
+            loss_accum = loss_accum / step_count
             self.optimizer.zero_grad()
-            loss_accum.backward()
-            self.optimizer.step()
+            self.scaler.scale(loss_accum).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
 
         return total_loss / total_batches
 
@@ -313,7 +323,8 @@ class EfficientMORAL(nn.Module):
         self.backbone.eval()
         self.heads.eval()
 
-        node_emb = self.backbone(self.features, self.edge_index)
+        with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
+            node_emb = self.backbone(self.features, self.edge_index)
 
         total_loss = 0.0
         total_batches = 0
@@ -324,8 +335,9 @@ class EfficientMORAL(nn.Module):
             labels = labels.to(self.device)
             groups = groups.to(self.device)
 
-            scores = self.heads(node_emb, edges, groups)
-            loss = self.criterion(scores, labels)
+            with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
+                scores = self.heads(node_emb, edges, groups)
+                loss = self.criterion(scores, labels)
 
             total_loss += loss.item()
             total_batches += 1
@@ -341,13 +353,18 @@ class EfficientMORAL(nn.Module):
         self.heads.eval()
 
         edges, _, groups = self.test_data
-        node_emb = self.backbone(self.features, self.edge_index)
+        with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
+            node_emb = self.backbone(self.features, self.edge_index)
 
         scores = []
         for i in range(0, edges.size(0), self.batch_size):
             batch_edges = edges[i : i + self.batch_size].to(self.device)
             batch_groups = groups[i : i + self.batch_size].to(self.device)
-            scores.append(self.heads(node_emb, batch_edges, batch_groups))
+
+            with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
+                score = self.heads(node_emb, batch_edges, batch_groups)
+
+            scores.append(score)
 
         return torch.cat(scores, dim=0)
 
