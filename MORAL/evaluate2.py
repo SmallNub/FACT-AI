@@ -57,6 +57,41 @@ def calculate_equal_opportunity(scores, labels, groups, k=100):
     eo_gap = max([abs(tpr_per_group[g] - overall_tpr) for g in [0, 1, 2]])
     return eo_gap
 
+def calculate_individual_fairness(scores, edges, features, k=100, tau=0.7):
+    """
+    Individual fairness via prediction consistency on similar edges.
+
+    scores:   [E] prediction scores (numpy)
+    edges:    [E, 2] edge list (numpy)
+    features: [N, d] node features (numpy)
+    """
+
+    k = min(k, len(scores))
+    idx = np.argsort(-scores)[:k]
+
+    edges_k = edges[idx]
+    scores_k = scores[idx]
+
+    # Edge embeddings (concatenated node features)
+    edge_emb = np.concatenate(
+        [features[edges_k[:, 0]], features[edges_k[:, 1]]], axis=1
+    )
+
+    # Normalize
+    edge_emb = edge_emb / (np.linalg.norm(edge_emb, axis=1, keepdims=True) + 1e-9)
+
+    # Cosine similarity
+    sim = edge_emb @ edge_emb.T
+    mask = sim > tau
+
+    diff = scores_k[:, None] - scores_k[None, :]
+    loss = (diff ** 2 * mask).sum()
+
+    denom = mask.sum()
+    if denom == 0:
+        return 0.0
+
+    return float(loss / denom)
 
 def evaluate(k=100):
     results_dir, splits_dir = "./results", "./data/splits"
@@ -139,7 +174,7 @@ def evaluate(k=100):
                 method_files.setdefault(m_key, []).append(f)
 
             for method, f_list in method_files.items():
-                p_runs, n_runs, eo_runs = [], [], []
+                p_runs, n_runs, eo_runs, if_runs = [], [], [], []
 
                 for f in f_list:
                     try:
@@ -160,6 +195,13 @@ def evaluate(k=100):
                             scores_all, test_labels_all, test_edge_sens_groups, k=k
                         )
 
+                        if_val = calculate_individual_fairness(
+                            scores_all,
+                            test_edges_np,
+                            features,
+                            k=k,
+                        )
+
                         idx = np.argsort(-scores_final_np)
                         ranked_groups = test_pos_groups[idx[: min(k, len(idx))]]
                         prec_at_k = (
@@ -171,6 +213,7 @@ def evaluate(k=100):
                         p_runs.append(prec_at_k)
                         n_runs.append(calculate_ndkl(ranked_groups, target_dist, k=k))
                         eo_runs.append(eo_val)
+                        if_runs.append(if_val)
 
                     except Exception:
                         continue
@@ -183,6 +226,7 @@ def evaluate(k=100):
                             f"{np.mean(p_runs):.4f} ± {np.std(p_runs):.4f}",
                             f"{np.mean(n_runs):.4f} ± {np.std(n_runs):.4f}",
                             f"{np.mean(eo_runs):.4f} ± {np.std(eo_runs):.4f}",
+                            f"{np.mean(if_runs):.4f} ± {np.std(if_runs):.4f}",
                         ]
                     )
 
@@ -192,7 +236,7 @@ def evaluate(k=100):
     if summary_data:
         df = pd.DataFrame(
             summary_data,
-            columns=["Dataset", "Method", f"Prec@{k}", f"NDKL@{k}", f"EO Gap@{k}"],
+            columns=["Dataset", "Method", f"Prec@{k}", f"NDKL@{k}", f"EO Gap@{k}", f"IF@{k}"],
         )
         print("\n" + "=" * 80)
         print(f"EVALUATION SUMMARY @ top-{k}")
