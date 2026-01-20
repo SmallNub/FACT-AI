@@ -20,6 +20,7 @@ from utils import get_dataset, set_emissions_tracker
 
 
 def set_amp(enabled: bool) -> None:
+    """Set up automatic mixed precision (AMP) if enabled."""
     if enabled:
         logger.info("Using automatic mixed precision (AMP) for training.")
         torch.backends.cudnn.deterministic = False
@@ -33,6 +34,7 @@ def set_amp(enabled: bool) -> None:
 
 
 def seed_everything(seed: int) -> None:
+    """Set random seeds for reproducibility."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -123,6 +125,9 @@ def parse_args() -> argparse.Namespace:
         "--patience", type=int, default=5, help="Patience for early stopping."
     )
     parser.add_argument(
+        "--accum", type=int, default=1, help="Number of accumulation steps."
+    )
+    parser.add_argument(
         "--full_graph",
         action="store_true",
         help="Whether to use the entire graph during training.",
@@ -158,6 +163,12 @@ def parse_args() -> argparse.Namespace:
         default="./emissions",
         help="Directory to save emissions data",
     )
+    parser.add_argument(
+        "--results_dir",
+        type=str,
+        default="./results",
+        help="Directory to save results data",
+    )
     return parser.parse_args()
 
 
@@ -173,6 +184,7 @@ def resolve_model_config(model_name: str) -> Dict[str, str]:
 
 
 def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
+    """Run a single training and evaluation cycle with a specific seed."""
     seed = args.seed + run
     seed_everything(seed)
     logger.info(f"Run {run + 1}/{args.runs} — seed={seed}")
@@ -197,6 +209,7 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
     labels = labels.cpu()
     sens = sens.cpu()
 
+    # Model selection
     if args.full_graph:
         logger.info("USING FULL GRAPH MORAL")
         model = MORAL_FULL(
@@ -259,7 +272,8 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
             weight_decay=args.weight_decay,
             batch_size=args.batch_size,
             device=args.device,
-            patience=args.patience
+            patience=args.patience,
+            accum_steps=args.accum,
         )
     elif args.individual:
         logger.info("USING FULL GRAPH MORAL")
@@ -313,8 +327,8 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
     outputs = model.predict().cpu()
 
     run_suffix = f"{args.dataset}_{args.fair_model.upper()}_{args.model.upper()}_{run}"
-    os.makedirs("results", exist_ok=True)
-    torch.save(outputs, os.path.join("results", f"three_classifiers_{run_suffix}.pt"))
+    os.makedirs(args.results_dir, exist_ok=True)
+    torch.save(outputs, os.path.join(args.results_dir, f"three_classifiers_{run_suffix}.pt"))
 
     if not isinstance(data, Data):
         logger.warning(
@@ -363,7 +377,7 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
 
     torch.save(
         (final_output, final_labels),
-        os.path.join("results", f"three_classifiers_{run_suffix}_final_ranking.pt"),
+        os.path.join(args.results_dir, f"three_classifiers_{run_suffix}_final_ranking.pt"),
     )
     logger.success(f"Finished run {run + 1}/{args.runs}")
 
@@ -371,6 +385,7 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
 def main() -> None:
     args = parse_args()
 
+    # Set up emissions tracker if requested
     tracker = None
     if args.track_emissions:
         try:
@@ -395,6 +410,7 @@ def main() -> None:
     for run in range(args.runs):
         run_single(args, run, tracker)
 
+    # Display emissions summary
     if tracker:
         emissions = tracker.stop()
 

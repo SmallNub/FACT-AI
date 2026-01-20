@@ -14,6 +14,7 @@ NUM_GROUPS = 3
 
 
 def init_weights(m):
+    """Initialize model weights."""
     if isinstance(m, nn.Linear):
         nn.init.kaiming_uniform_(m.weight, nonlinearity="relu")
         if m.bias is not None:
@@ -31,12 +32,14 @@ def init_weights(m):
 
 
 def standardize(tensor: Tensor) -> Tensor:
+    """Standardize tensor along the feature dimension to unit mean and variance."""
     return (tensor - tensor.mean(dim=0, keepdim=True)) / (
         tensor.std(dim=0, keepdim=True) + 1e-6
     )
 
 
 def normalize(tensor: Tensor) -> Tensor:
+    """Normalize tensor along the feature dimension to unit norm."""
     return F.normalize(tensor, p=2, dim=1)
 
 
@@ -50,9 +53,15 @@ class EdgeGroupDataset(Dataset):
         return self.edges.size(0)
 
     def __getitem__(self, idx):
-        return self.edges[idx, 0], self.edges[idx, 1], self.labels[idx], self.groups[idx]
+        return (
+            self.edges[idx, 0],
+            self.edges[idx, 1],
+            self.labels[idx],
+            self.groups[idx],
+        )
 
     def __getitems__(self, indices):
+        """Optimized batch retrieval."""
         return (
             self.edges[indices, 0],
             self.edges[indices, 1],
@@ -62,6 +71,8 @@ class EdgeGroupDataset(Dataset):
 
 
 class BottleneckBlock(nn.Module):
+    """Simple bottleneck block with down and up projections."""
+
     def __init__(self, hidden_channels: int):
         super().__init__()
         bottleneck = hidden_channels // 4
@@ -83,7 +94,11 @@ class BottleneckBlock(nn.Module):
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, heads: int = 8, dropout: float = 0.3):
+    """Graph attention convolutional block with normalization, activation, bottleneck, and skip connections."""
+
+    def __init__(
+        self, in_channels: int, out_channels: int, heads: int = 8, dropout: float = 0.3
+    ):
         super().__init__()
 
         self.conv = GATConv(
@@ -98,6 +113,7 @@ class ConvBlock(nn.Module):
         self.bottleneck = BottleneckBlock(out_channels)
         self.dropout = nn.Dropout(dropout)
 
+        # Residual projection if in/out channels differ
         self.skip_proj = (
             nn.Linear(in_channels, out_channels)
             if in_channels != out_channels
@@ -122,6 +138,7 @@ class ConvBlock(nn.Module):
 
 
 class SharedBackbone(nn.Module):
+    """Embedding backbone with multiple graph attention convolutional layers."""
     def __init__(
         self,
         in_channels: int,
@@ -136,23 +153,26 @@ class SharedBackbone(nn.Module):
         layer_sizes = [in_channels] + [hidden_channels] * (num_layers - 1)
 
         for layer_size in layer_sizes:
-            self.convs.append(
-                ConvBlock(layer_size, hidden_channels, heads, dropout)
-            )
+            self.convs.append(ConvBlock(layer_size, hidden_channels, heads, dropout))
 
     def forward(self, x: Tensor, edge_index: Tensor) -> Tensor:
         for conv in self.convs:
             x = conv(x, edge_index)
 
+        # Standardize and normalize final embeddings for stability
         x = standardize(x)
         x = normalize(x)
         return x
 
 
 class GroupHeads(nn.Module):
-    def __init__(self, hidden_channels: int, num_groups: int = NUM_GROUPS, dropout: float = 0.3):
+    """Heads for group-specific edge scoring."""
+    def __init__(
+        self, hidden_channels: int, num_groups: int = NUM_GROUPS, dropout: float = 0.3
+    ):
         super().__init__()
 
+        # Shared MLP for edge representation
         self.shared = nn.Sequential(
             nn.Linear(hidden_channels * 2, hidden_channels),
             nn.BatchNorm1d(hidden_channels),
@@ -164,6 +184,7 @@ class GroupHeads(nn.Module):
             nn.Dropout(dropout),
         )
 
+        # Group-specific parameters for final scoring
         self.group_weight = nn.Parameter(
             torch.empty(num_groups, hidden_channels // 2, 1)
         )
@@ -175,6 +196,7 @@ class GroupHeads(nn.Module):
         x = torch.cat([node_emb[src], node_emb[dst]], dim=-1)
         x = self.shared(x)
 
+        # Group-specific scoring
         groups = groups.long()
         w = self.group_weight[groups]
         b = self.group_bias[groups]
@@ -195,20 +217,23 @@ class EfficientMORAL(nn.Module):
         batch_size: int = 1024,
         device: str = "cpu",
         patience: int = 10,
+        accum_steps: int = 1,
     ):
         super().__init__()
 
         self.device = torch.device(device)
         self.batch_size = batch_size
         self.patience = patience
-        self.accum_steps = 1
+        self.accum_steps = accum_steps
 
+        # Standardize features (massive performance boost)
         features = standardize(features.float())
         self.features = features.to(self.device)
 
         self.edge_index = adj.coalesce().indices().to(self.device)
         self.sens = sens
 
+        # Model components
         self.backbone = SharedBackbone(
             in_channels=features.size(1),
             hidden_channels=num_hidden,
@@ -216,6 +241,7 @@ class EfficientMORAL(nn.Module):
 
         self.heads = GroupHeads(num_hidden).to(self.device)
 
+        # Training components
         self.criterion = nn.BCEWithLogitsLoss()
         self.optimizer = torch.optim.AdamW(
             list(self.backbone.parameters()) + list(self.heads.parameters()),
@@ -234,6 +260,7 @@ class EfficientMORAL(nn.Module):
         self.amp_enabled = torch.get_float32_matmul_precision() == "medium"
         self.scaler = GradScaler(enabled=self.amp_enabled)
 
+        # Data loaders
         self.train_loader = self._build_loader(edge_splits.get("train"), True)
         self.valid_loader = self._build_loader(edge_splits.get("valid"), False)
         self.test_data = self._prepare_edges(edge_splits.get("test"))
@@ -281,14 +308,25 @@ class EfficientMORAL(nn.Module):
             labels = labels.to(self.device)
             groups = groups.to(self.device)
 
+            # Only compute node embeddings once per accumulation cycle
             if step_count == 0:
-                edge_index, _, _ = dropout_node(self.edge_index, p=0.1, training=self.training)
+                edge_index, _, _ = dropout_node(
+                    self.edge_index, p=0.1, training=self.training
+                )
                 edge_index, _ = dropout_edge(edge_index, p=0.2, training=self.training)
 
-                with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
+                with autocast(
+                    device_type=self.device.type,
+                    enabled=self.amp_enabled,
+                    dtype=torch.bfloat16,
+                ):
                     node_emb = self.backbone(self.features, edge_index)
 
-            with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
+            with autocast(
+                device_type=self.device.type,
+                enabled=self.amp_enabled,
+                dtype=torch.bfloat16,
+            ):
                 scores = self.heads(node_emb, edges, groups)
                 loss = self.criterion(scores, labels)
 
@@ -297,6 +335,7 @@ class EfficientMORAL(nn.Module):
             total_batches += 1
             step_count += 1
 
+            # Perform optimizer step after accumulating gradients
             if step_count >= self.accum_steps:
                 loss_accum = loss_accum / step_count
                 self.optimizer.zero_grad()
@@ -306,6 +345,7 @@ class EfficientMORAL(nn.Module):
                 step_count = 0
                 loss_accum = 0.0
 
+        # Final optimizer step for remaining gradients
         if step_count > 0:
             loss_accum = loss_accum / step_count
             self.optimizer.zero_grad()
@@ -323,7 +363,9 @@ class EfficientMORAL(nn.Module):
         self.backbone.eval()
         self.heads.eval()
 
-        with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
+        with autocast(
+            device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16
+        ):
             node_emb = self.backbone(self.features, self.edge_index)
 
         total_loss = 0.0
@@ -335,7 +377,11 @@ class EfficientMORAL(nn.Module):
             labels = labels.to(self.device)
             groups = groups.to(self.device)
 
-            with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
+            with autocast(
+                device_type=self.device.type,
+                enabled=self.amp_enabled,
+                dtype=torch.bfloat16,
+            ):
                 scores = self.heads(node_emb, edges, groups)
                 loss = self.criterion(scores, labels)
 
@@ -353,7 +399,9 @@ class EfficientMORAL(nn.Module):
         self.heads.eval()
 
         edges, _, groups = self.test_data
-        with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
+        with autocast(
+            device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16
+        ):
             node_emb = self.backbone(self.features, self.edge_index)
 
         scores = []
@@ -361,7 +409,11 @@ class EfficientMORAL(nn.Module):
             batch_edges = edges[i : i + self.batch_size].to(self.device)
             batch_groups = groups[i : i + self.batch_size].to(self.device)
 
-            with autocast(device_type=self.device.type, enabled=self.amp_enabled, dtype=torch.bfloat16):
+            with autocast(
+                device_type=self.device.type,
+                enabled=self.amp_enabled,
+                dtype=torch.bfloat16,
+            ):
                 score = self.heads(node_emb, batch_edges, batch_groups)
 
             scores.append(score)

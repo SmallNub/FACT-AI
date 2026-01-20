@@ -7,6 +7,7 @@ from utils import get_dataset
 
 
 def calculate_ndkl(sorted_groups, target_dist, k=100):
+    """Compute Normalized Discounted KL Divergence (NDKL) at k."""
     k = min(k, len(sorted_groups))
     actual_counts = np.zeros_like(target_dist, dtype=np.float32)
     dkl_val = 0.0
@@ -26,6 +27,7 @@ def calculate_ndkl(sorted_groups, target_dist, k=100):
 
 
 def calculate_equal_opportunity(scores, labels, groups, k=100):
+    """Compute Equal Opportunity Gap at k."""
     if len(scores) == 0:
         return 0.0
 
@@ -57,14 +59,9 @@ def calculate_equal_opportunity(scores, labels, groups, k=100):
     eo_gap = max([abs(tpr_per_group[g] - overall_tpr) for g in [0, 1, 2]])
     return eo_gap
 
-def calculate_individual_fairness(scores, edges, features, k=100, tau=0.7):
-    """
-    Individual fairness via prediction consistency on similar edges.
 
-    scores:   [E] prediction scores (numpy)
-    edges:    [E, 2] edge list (numpy)
-    features: [N, d] node features (numpy)
-    """
+def calculate_individual_fairness(scores, edges, features, k=100, tau=0.7):
+    """Individual fairness via prediction consistency on similar edges."""
 
     k = min(k, len(scores))
     idx = np.argsort(-scores)[:k]
@@ -93,7 +90,9 @@ def calculate_individual_fairness(scores, edges, features, k=100, tau=0.7):
 
     return float(loss / denom)
 
+
 def evaluate(k=100):
+    """Evaluate link prediction results across datasets and methods."""
     results_dir, splits_dir = "./results", "./data/splits"
     # datasets = ["facebook", "german", "nba", "pokec_n", "pokec_z", "credit"]
     datasets = ["facebook", "nba", "german"]

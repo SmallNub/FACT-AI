@@ -216,6 +216,7 @@ class MORAL(nn.Module):
         self.idx_test = idx_test
         self.patience = patience
 
+        # Model components
         self.encoders = nn.ModuleList(
             [
                 build_encoder(encoder, self.features.size(1), num_hidden).to(
@@ -231,6 +232,7 @@ class MORAL(nn.Module):
             ]
         )
 
+        # Training components
         self.optimizers = [
             torch.optim.Adam(
                 list(self.encoders[group].parameters())
@@ -250,6 +252,7 @@ class MORAL(nn.Module):
             for optimizer in self.optimizers
         ]
 
+        # Data loaders
         self.train_loaders = self._build_group_loaders(
             edge_splits.get("train"), shuffle=True
         )
@@ -434,6 +437,7 @@ def model_fit(model, epochs: int = 300) -> None:
         else:
             val_loss = model._evaluate()
 
+        # Logging
         if epoch % 10 == 0 or epoch == 1:
             if hasattr(model, "optimizers"):
                 lr = model.optimizers[0].param_groups[0]["lr"]
@@ -452,6 +456,7 @@ def model_fit(model, epochs: int = 300) -> None:
             log_system_usage(logger)
 
         if val_loss is not None:
+            # Early stopping check
             if val_loss < best_val:
                 best_val = val_loss
                 best_state = deepcopy(model.state_dict())
@@ -463,6 +468,7 @@ def model_fit(model, epochs: int = 300) -> None:
                     logger.info(f"Early stopping at epoch {epoch}")
                     break
 
+            # Step learning rate schedulers
             if hasattr(model, "schedulers"):
                 for scheduler in model.schedulers:
                     scheduler.step(val_loss)
@@ -471,6 +477,7 @@ def model_fit(model, epochs: int = 300) -> None:
             else:
                 raise ValueError("Model has no scheduler attribute.")
 
+    # Restore best model
     if best_state is not None:
         logger.info(
             f"Restoring best model from epoch {best_epoch} with valid loss {best_val:.4f}"
