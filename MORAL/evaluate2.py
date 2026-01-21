@@ -1,3 +1,4 @@
+import argparse
 import torch
 import numpy as np
 import glob
@@ -91,9 +92,9 @@ def calculate_individual_fairness(scores, edges, features, k=100, tau=0.7):
     return float(loss / denom)
 
 
-def evaluate(k=100):
+def evaluate(k=1000, dir=""):
     """Evaluate link prediction results across datasets and methods."""
-    results_dir, splits_dir = "./results", "./data/splits"
+    results_dir, splits_dir = "./results/"+dir, "./data/splits"
     # datasets = ["facebook", "german", "nba", "pokec_n", "pokec_z", "credit"]
     datasets = ["facebook", "nba", "german"]
     # datasets = ["nba"]
@@ -244,5 +245,20 @@ def evaluate(k=100):
         print("=" * 80)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Train MORAL on a selected dataset.")
+    parser.add_argument(
+        "--k", type=int, default="1000", help="Value of k for metric calculation."
+    )
+    parser.add_argument(
+        "--dir", type=str, default="", help="Directory containing results (relative to MORAL/results)."
+    )
+    return parser.parse_args()
+
+def main() -> None:
+    args = parse_args()
+    evaluate(k=args.k, dir=args.dir)
+
+
 if __name__ == "__main__":
-    evaluate(k=1000)
+    main()
