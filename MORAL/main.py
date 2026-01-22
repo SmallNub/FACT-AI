@@ -276,7 +276,7 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
             accum_steps=args.accum,
         )
     elif args.individual:
-        logger.info("USING FULL GRAPH MORAL")
+        logger.info("USING MORAL WITH INDIVIDUAL FAIRNESS")
         model = MORAL_IF(
             adj=adj,
             features=features,
