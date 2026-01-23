@@ -16,9 +16,9 @@ source activate FACT
 
 set -euo pipefail
 
-srun python main.py --fair_model moral --model gae --dataset credit --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL_early_stop/" --results_dir "results_MORAL_early_stop/"
-srun python main.py --fair_model moral --model gae --dataset german --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL_early_stop/" --results_dir "results_MORAL_early_stop/"
-srun python main.py --fair_model moral --model gae --dataset nba --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL_early_stop/" --results_dir "results_MORAL_early_stop/"
-srun python main.py --fair_model moral --model gae --dataset facebook --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL_early_stop/" --results_dir "results_MORAL_early_stop/"
-srun python main.py --fair_model moral --model gae --dataset pokec_n --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL_early_stop/" --results_dir "results_MORAL_early_stop/"
-srun python main.py --fair_model moral --model gae --dataset pokec_z --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL_early_stop/" --results_dir "results_MORAL_early_stop/"
+srun python main.py --fair_model moral --model gae --dataset credit --device cuda:0 --epochs 500 --lr 0.0003 --weight_decay 0.0 --track_emissions --emissions_dir "emissions_MORAL_early_stop/" --results_dir "results_MORAL_early_stop/"
+srun python main.py --fair_model moral --model gae --dataset german --device cuda:0 --epochs 500 --lr 0.0003 --weight_decay 0.0 --track_emissions --emissions_dir "emissions_MORAL_early_stop/" --results_dir "results_MORAL_early_stop/"
+srun python main.py --fair_model moral --model gae --dataset nba --device cuda:0 --epochs 500 --lr 0.0003 --weight_decay 0.0 --track_emissions --emissions_dir "emissions_MORAL_early_stop/" --results_dir "results_MORAL_early_stop/"
+srun python main.py --fair_model moral --model gae --dataset facebook --device cuda:0 --epochs 500 --lr 0.0003 --weight_decay 0.0 --track_emissions --emissions_dir "emissions_MORAL_early_stop/" --results_dir "results_MORAL_early_stop/"
+srun python main.py --fair_model moral --model gae --dataset pokec_n --device cuda:0 --epochs 500 --lr 0.0003 --weight_decay 0.0 --track_emissions --emissions_dir "emissions_MORAL_early_stop/" --results_dir "results_MORAL_early_stop/"
+srun python main.py --fair_model moral --model gae --dataset pokec_z --device cuda:0 --epochs 500 --lr 0.0003 --weight_decay 0.0 --track_emissions --emissions_dir "emissions_MORAL_early_stop/" --results_dir "results_MORAL_early_stop/"
