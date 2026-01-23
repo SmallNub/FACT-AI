@@ -94,9 +94,9 @@ def calculate_individual_fairness(scores, edges, features, k=100, tau=0.7):
 
 def evaluate(k=1000, dir=""):
     """Evaluate link prediction results across datasets and methods."""
-    results_dir, splits_dir = "./results/"+dir, "./data/splits"
-    # datasets = ["facebook", "german", "nba", "pokec_n", "pokec_z", "credit"]
-    datasets = ["facebook", "nba", "german"]
+    results_dir, splits_dir = "./" + dir, "./data/splits"
+    datasets = ["facebook", "german", "nba", "pokec_n", "pokec_z", "credit"]
+    # datasets = ["facebook", "nba", "german"]
     # datasets = ["nba"]
     summary_data = []
 
