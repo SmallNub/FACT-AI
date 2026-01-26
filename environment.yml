@@ -37,6 +37,7 @@ dependencies:
   - ffmpeg
   - qt6-main
   - pyside6
+  - ipykernel
   - pip:
       - torch-geometric==2.7.0
       - psutil

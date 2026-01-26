@@ -14,6 +14,7 @@ except ImportError:
     print("Error: Could not import dataset classes.")
     sys.exit(1)
 
+
 def load_raw_dataset(dataset_name: str, root: str = "./dataset") -> Dict:
     dataset_map = {
         "facebook": Facebook,
@@ -30,7 +31,7 @@ def load_raw_dataset(dataset_name: str, root: str = "./dataset") -> Dict:
 
     dataset = dataset_map[dataset_name](root=root)
     sens = dataset.sens()
-    
+
     if sens is None:
         print(f"Warning: Dataset {dataset_name} has no sensitive attributes.")
 
@@ -45,6 +46,7 @@ def load_raw_dataset(dataset_name: str, root: str = "./dataset") -> Dict:
         "sens_idx": dataset.sens_idx(),
     }
 
+
 def get_all_edges(adj: torch.Tensor) -> torch.Tensor:
     if adj.is_sparse:
         edge_index = adj.coalesce().indices()
@@ -55,13 +57,14 @@ def get_all_edges(adj: torch.Tensor) -> torch.Tensor:
     mask = edge_index[0] != edge_index[1]
     return edge_index[:, mask]
 
+
 def ensure_n_by_2(edge_tensor: torch.Tensor) -> torch.Tensor:
     if edge_tensor.dim() != 2:
         raise ValueError(f"Edge tensor must be 2D, got {edge_tensor.shape}")
 
     if edge_tensor.shape[0] == 2 and edge_tensor.shape[1] != 2:
         return edge_tensor.t()
-    
+
     if edge_tensor.shape[1] == 2:
         return edge_tensor
 
@@ -69,6 +72,7 @@ def ensure_n_by_2(edge_tensor: torch.Tensor) -> torch.Tensor:
         return edge_tensor.t()
 
     raise ValueError(f"Invalid edge shape: {edge_tensor.shape}")
+
 
 def generate_stratified_negatives(
     existing_edges: np.ndarray,
@@ -86,43 +90,49 @@ def generate_stratified_negatives(
 
     negatives_by_group = {0: [], 1: [], 2: []}
     total_needed = sum(group_counts.values())
-    
+
     attempts = 0
     max_attempts = total_needed * 1000
     rng = np.random.default_rng()
 
-    while any(len(negatives_by_group[g]) < group_counts[g] for g in [0, 1, 2]) and attempts < max_attempts:
+    while (
+        any(len(negatives_by_group[g]) < group_counts[g] for g in [0, 1, 2])
+        and attempts < max_attempts
+    ):
         u = rng.integers(0, num_nodes)
         v = rng.integers(0, num_nodes)
-        
+
         if u == v:
             continue
-        
+
         if u > v:
             u, v = v, u
-        
+
         pair = (u, v)
         if pair in pos_set or pair in global_neg_set:
             continue
-        
+
         s_u = sens[u].item()
         s_v = sens[v].item()
         group = s_u + s_v
-        
+
         if len(negatives_by_group[group]) < group_counts[group]:
             negatives_by_group[group].append([u, v])
             global_neg_set.add(pair)
-        
+
         attempts += 1
-    
+
     if attempts >= max_attempts:
-        raise RuntimeError(f"Could not generate all stratified negatives for {split_name}")
-    
+        raise RuntimeError(
+            f"Could not generate all stratified negatives for {split_name}"
+        )
+
     all_negatives = []
     for g in [0, 1, 2]:
         all_negatives.extend(negatives_by_group[g])
-    
+
     return np.array(all_negatives, dtype=np.int64)
+
 
 def create_moral_splits(
     all_edges: torch.Tensor,
@@ -130,22 +140,22 @@ def create_moral_splits(
     num_nodes: int,
     test_ratio: float = 0.2,
     val_ratio: float = 0.1,
-    seed: int = 42
+    seed: int = 42,
 ) -> Dict:
     edges = all_edges.t().cpu().numpy()
     edges = np.sort(edges, axis=1)
     edges = np.unique(edges, axis=0)
 
     np.random.seed(seed)
-    
+
     train_edges_list = []
     val_edges_list = []
     test_edges_list = []
-    
+
     train_counts = {0: 0, 1: 0, 2: 0}
     val_counts = {0: 0, 1: 0, 2: 0}
     test_counts = {0: 0, 1: 0, 2: 0}
-    
+
     for group in [0, 1, 2]:
         group_edges = []
         for u, v in edges:
@@ -153,39 +163,57 @@ def create_moral_splits(
             s_v = sens[v].item()
             if s_u + s_v == group:
                 group_edges.append([u, v])
-        
+
         if len(group_edges) == 0:
             continue
-            
+
         group_edges = np.array(group_edges)
         perm = np.random.permutation(len(group_edges))
         group_edges = group_edges[perm]
-        
+
         n_test = int(len(group_edges) * test_ratio)
         n_val = int(len(group_edges) * val_ratio)
         n_train = len(group_edges) - n_test - n_val
-        
+
         train_edges_list.append(group_edges[:n_train])
-        val_edges_list.append(group_edges[n_train:n_train + n_val])
-        test_edges_list.append(group_edges[n_train + n_val:])
-        
+        val_edges_list.append(group_edges[n_train : n_train + n_val])
+        test_edges_list.append(group_edges[n_train + n_val :])
+
         train_counts[group] = n_train
         val_counts[group] = n_val
         test_counts[group] = n_test
-    
-    train_edges = np.vstack(train_edges_list) if train_edges_list else np.array([], dtype=np.int64).reshape(0, 2)
-    val_edges = np.vstack(val_edges_list) if val_edges_list else np.array([], dtype=np.int64).reshape(0, 2)
-    test_edges = np.vstack(test_edges_list) if test_edges_list else np.array([], dtype=np.int64).reshape(0, 2)
-    
+
+    train_edges = (
+        np.vstack(train_edges_list)
+        if train_edges_list
+        else np.array([], dtype=np.int64).reshape(0, 2)
+    )
+    val_edges = (
+        np.vstack(val_edges_list)
+        if val_edges_list
+        else np.array([], dtype=np.int64).reshape(0, 2)
+    )
+    test_edges = (
+        np.vstack(test_edges_list)
+        if test_edges_list
+        else np.array([], dtype=np.int64).reshape(0, 2)
+    )
+
     np.random.shuffle(train_edges)
     np.random.shuffle(val_edges)
     np.random.shuffle(test_edges)
 
     global_neg_set = set()
 
-    neg_train = generate_stratified_negatives(edges, sens, num_nodes, train_counts, global_neg_set, "train")
-    neg_val = generate_stratified_negatives(edges, sens, num_nodes, val_counts, global_neg_set, "val")
-    neg_test = generate_stratified_negatives(edges, sens, num_nodes, test_counts, global_neg_set, "test")
+    neg_train = generate_stratified_negatives(
+        edges, sens, num_nodes, train_counts, global_neg_set, "train"
+    )
+    neg_val = generate_stratified_negatives(
+        edges, sens, num_nodes, val_counts, global_neg_set, "val"
+    )
+    neg_test = generate_stratified_negatives(
+        edges, sens, num_nodes, test_counts, global_neg_set, "test"
+    )
 
     splits = {
         "train": {
@@ -210,17 +238,19 @@ def create_moral_splits(
 
     return splits, train_edge_index
 
+
 def verify_utils_compatibility(splits: Dict) -> bool:
     for name in ["train", "valid", "test"]:
         e = splits[name]["edge"]
         if e.dim() != 2 or e.shape[1] != 2:
             return False
-        
+
         neg = splits[name]["edge_neg"]
         if neg.dim() != 2 or neg.shape[1] != 2:
             return False
-            
+
     return True
+
 
 def fix_existing_file(filepath: Path) -> bool:
     try:
@@ -233,7 +263,7 @@ def fix_existing_file(filepath: Path) -> bool:
         return False
 
     changed = False
-    
+
     for split in ["train", "valid", "test"]:
         for key in ["edge", "edge_neg"]:
             tensor = splits[split][key]
@@ -243,7 +273,7 @@ def fix_existing_file(filepath: Path) -> bool:
 
     if not hasattr(data, "sens") or data.sens is None:
         return False
-        
+
     train_edges_count = splits["train"]["edge"].shape[0]
     if data.edge_index.shape[1] > train_edges_count:
         data.edge_index = splits["train"]["edge"].t()
@@ -253,6 +283,7 @@ def fix_existing_file(filepath: Path) -> bool:
         torch.save((data, splits), filepath)
 
     return verify_utils_compatibility(splits)
+
 
 def generate_dataset(
     dataset_name: str,
@@ -278,7 +309,7 @@ def generate_dataset(
     num_nodes = raw["features"].shape[0]
 
     all_edges = get_all_edges(raw["adj"])
-    
+
     splits, train_edge_index = create_moral_splits(all_edges, raw["sens"], num_nodes)
 
     data = Data(
@@ -296,13 +327,16 @@ def generate_dataset(
     verify_utils_compatibility(splits)
     return True, f"Saved {path}"
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str)
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--splits_dir", type=Path, default=Path("data/splits"))
     parser.add_argument("--force", action="store_true", help="Force regeneration")
-    parser.add_argument("--no_fix", action="store_true", help="Skip fixing existing files")
+    parser.add_argument(
+        "--no_fix", action="store_true", help="Skip fixing existing files"
+    )
 
     args = parser.parse_args()
 
@@ -324,6 +358,7 @@ def main():
         print(msg)
     else:
         print("Specify --dataset DATASET or --all")
+
 
 if __name__ == "__main__":
     main()
