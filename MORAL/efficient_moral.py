@@ -97,7 +97,12 @@ class ConvBlock(nn.Module):
     """Graph attention convolutional block with normalization, activation, bottleneck, and skip connections."""
 
     def __init__(
-        self, in_channels: int, out_channels: int, heads: int = 8, dropout: float = 0.3
+        self,
+        in_channels: int,
+        out_channels: int,
+        heads: int = 8,
+        dropout: float = 0.3,
+        use_bottleneck: bool = True,
     ):
         super().__init__()
 
@@ -110,8 +115,10 @@ class ConvBlock(nn.Module):
         )
         self.norm = gnn.BatchNorm(out_channels)
         self.act = nn.ELU()
-        self.bottleneck = BottleneckBlock(out_channels)
         self.dropout = nn.Dropout(dropout)
+        self.use_bottleneck = use_bottleneck
+        if self.use_bottleneck:
+            self.bottleneck = BottleneckBlock(out_channels)
 
         # Residual projection if in/out channels differ
         self.skip_proj = (
@@ -126,7 +133,10 @@ class ConvBlock(nn.Module):
         x = self.conv(x, edge_index)
         x = self.norm(x)
         x = self.act(x)
-        x = x + self.bottleneck(x)
+
+        if self.use_bottleneck:
+            x = x + self.bottleneck(x)
+
         x = self.dropout(x)
 
         if self.skip_proj is not None:
@@ -139,6 +149,7 @@ class ConvBlock(nn.Module):
 
 class SharedBackbone(nn.Module):
     """Embedding backbone with multiple graph attention convolutional layers."""
+
     def __init__(
         self,
         in_channels: int,
@@ -146,6 +157,7 @@ class SharedBackbone(nn.Module):
         num_layers: int = 3,
         heads: int = 8,
         dropout: float = 0.3,
+        use_bottleneck: bool = True,
     ):
         super().__init__()
 
@@ -153,7 +165,7 @@ class SharedBackbone(nn.Module):
         layer_sizes = [in_channels] + [hidden_channels] * (num_layers - 1)
 
         for layer_size in layer_sizes:
-            self.convs.append(ConvBlock(layer_size, hidden_channels, heads, dropout))
+            self.convs.append(ConvBlock(layer_size, hidden_channels, heads, dropout, use_bottleneck))
 
     def forward(self, x: Tensor, edge_index: Tensor) -> Tensor:
         for conv in self.convs:
@@ -167,6 +179,7 @@ class SharedBackbone(nn.Module):
 
 class GroupHeads(nn.Module):
     """Heads for group-specific edge scoring."""
+
     def __init__(
         self, hidden_channels: int, num_groups: int = NUM_GROUPS, dropout: float = 0.3
     ):
@@ -218,6 +231,8 @@ class EfficientMORAL(nn.Module):
         device: str = "cpu",
         patience: int = 10,
         accum_steps: int = 1,
+        num_layers: int = 3,
+        use_bottleneck: bool = True,
     ):
         super().__init__()
 
@@ -237,6 +252,8 @@ class EfficientMORAL(nn.Module):
         self.backbone = SharedBackbone(
             in_channels=features.size(1),
             hidden_channels=num_hidden,
+            num_layers=num_layers,
+            use_bottleneck=use_bottleneck,
         ).to(self.device)
 
         self.heads = GroupHeads(num_hidden).to(self.device)

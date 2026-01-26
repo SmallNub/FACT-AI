@@ -255,6 +255,7 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
+
 def main() -> None:
     args = parse_args()
     evaluate(k=args.k, dir=args.dir)

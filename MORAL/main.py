@@ -128,6 +128,14 @@ def parse_args() -> argparse.Namespace:
         "--accum", type=int, default=1, help="Number of accumulation steps."
     )
     parser.add_argument(
+        "--num_layers", type=int, default=3, help="Number of layers in the model."
+    )
+    parser.add_argument(
+        "--skip_bottleneck",
+        action="store_true",
+        help="Skip bottleneck blocks in the model.",
+    )
+    parser.add_argument(
         "--full_graph",
         action="store_true",
         help="Whether to use the entire graph during training.",
@@ -274,6 +282,8 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
             device=args.device,
             patience=args.patience,
             accum_steps=args.accum,
+            num_layers=args.num_layers,
+            use_bottleneck=not args.skip_bottleneck,
         )
     elif args.individual:
         logger.info("USING MORAL WITH INDIVIDUAL FAIRNESS")
