@@ -16,9 +16,9 @@ source activate FACT
 
 set -euo pipefail
 
-srun python main.py --fair_model moral --model gae --dataset credit --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL/" --results_dir "results_MORAL/" --individual
-srun python main.py --fair_model moral --model gae --dataset german --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL/" --results_dir "results_MORAL/" --individual
-srun python main.py --fair_model moral --model gae --dataset nba --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL/" --results_dir "results_MORAL/" --individual
-srun python main.py --fair_model moral --model gae --dataset facebook --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL/" --results_dir "results_MORAL/" --individual
-srun python main.py --fair_model moral --model gae --dataset pokec_n --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL/" --results_dir "results_MORAL/" --individual
-srun python main.py --fair_model moral --model gae --dataset pokec_z --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL/" --results_dir "results_MORAL/" --individual
+srun python main.py --fair_model moral --model gae --dataset credit --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL_IF/" --results_dir "results_MORAL_IF/" --individual
+srun python main.py --fair_model moral --model gae --dataset german --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL_IF/" --results_dir "results_MORAL_IF/" --individual
+srun python main.py --fair_model moral --model gae --dataset nba --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL_IF/" --results_dir "results_MORAL_IF/" --individual
+srun python main.py --fair_model moral --model gae --dataset facebook --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL_IF/" --results_dir "results_MORAL_IF/" --individual
+srun python main.py --fair_model moral --model gae --dataset pokec_n --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL_IF/" --results_dir "results_MORAL_IF/" --individual
+srun python main.py --fair_model moral --model gae --dataset pokec_z --device cuda:0 --epochs 500 --lr 0.0003 --track_emissions --emissions_dir "emissions_MORAL_IF/" --results_dir "results_MORAL_IF/" --individual

@@ -61,11 +61,12 @@ def calculate_equal_opportunity(scores, labels, groups, k=100):
     return eo_gap
 
 
-def calculate_individual_fairness(scores, edges, features, k=100, tau=0.7):
+def calculate_individual_fairness(scores, edges, features, k=100, threshold=0.7):
     """Individual fairness via prediction consistency on similar edges."""
 
     k = min(k, len(scores))
     idx = np.argsort(-scores)[:k]
+    eps = 1e-10
 
     edges_k = edges[idx]
     scores_k = scores[idx]
@@ -76,11 +77,11 @@ def calculate_individual_fairness(scores, edges, features, k=100, tau=0.7):
     )
 
     # Normalize
-    edge_emb = edge_emb / (np.linalg.norm(edge_emb, axis=1, keepdims=True) + 1e-9)
+    edge_emb = edge_emb / (np.linalg.norm(edge_emb, axis=1, keepdims=True) + eps)
 
     # Cosine similarity
     sim = edge_emb @ edge_emb.T
-    mask = sim > tau
+    mask = sim > threshold
 
     diff = scores_k[:, None] - scores_k[None, :]
     loss = (diff ** 2 * mask).sum()
