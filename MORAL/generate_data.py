@@ -16,6 +16,7 @@ except ImportError:
 
 
 def load_raw_dataset(dataset_name: str, root: str = "./dataset") -> Dict:
+    """Load raw dataset and return its components."""
     dataset_map = {
         "facebook": Facebook,
         "gplus": Google,
@@ -48,6 +49,7 @@ def load_raw_dataset(dataset_name: str, root: str = "./dataset") -> Dict:
 
 
 def get_all_edges(adj: torch.Tensor) -> torch.Tensor:
+    """Extract all edges from adjacency matrix, excluding self-loops."""
     if adj.is_sparse:
         edge_index = adj.coalesce().indices()
     else:
@@ -59,6 +61,7 @@ def get_all_edges(adj: torch.Tensor) -> torch.Tensor:
 
 
 def ensure_n_by_2(edge_tensor: torch.Tensor) -> torch.Tensor:
+    """Ensure edge tensor is of shape [N, 2]."""
     if edge_tensor.dim() != 2:
         raise ValueError(f"Edge tensor must be 2D, got {edge_tensor.shape}")
 
@@ -82,6 +85,7 @@ def generate_stratified_negatives(
     global_neg_set: Set[Tuple[int, int]],
     split_name: str,
 ) -> np.ndarray:
+    """Generate stratified negative edges based on sensitive groups."""
     pos_set = set()
     for u, v in existing_edges:
         if u > v:
@@ -95,6 +99,7 @@ def generate_stratified_negatives(
     max_attempts = total_needed * 1000
     rng = np.random.default_rng()
 
+    # Generate negatives until we have enough for each group
     while (
         any(len(negatives_by_group[g]) < group_counts[g] for g in [0, 1, 2])
         and attempts < max_attempts
@@ -142,6 +147,7 @@ def create_moral_splits(
     val_ratio: float = 0.1,
     seed: int = 42,
 ) -> Dict:
+    """Create stratified train/val/test splits for MORAL."""
     edges = all_edges.t().cpu().numpy()
     edges = np.sort(edges, axis=1)
     edges = np.unique(edges, axis=0)
@@ -156,6 +162,7 @@ def create_moral_splits(
     val_counts = {0: 0, 1: 0, 2: 0}
     test_counts = {0: 0, 1: 0, 2: 0}
 
+    # Stratify edges based on sensitive groups
     for group in [0, 1, 2]:
         group_edges = []
         for u, v in edges:
@@ -240,6 +247,7 @@ def create_moral_splits(
 
 
 def verify_utils_compatibility(splits: Dict) -> bool:
+    """Verify that splits are compatible with utility functions."""
     for name in ["train", "valid", "test"]:
         e = splits[name]["edge"]
         if e.dim() != 2 or e.shape[1] != 2:
@@ -253,6 +261,7 @@ def verify_utils_compatibility(splits: Dict) -> bool:
 
 
 def fix_existing_file(filepath: Path) -> bool:
+    """Fix existing file if it has incompatible tensor shapes."""
     try:
         content = torch.load(filepath)
         if isinstance(content, tuple) and len(content) == 2:
@@ -264,6 +273,7 @@ def fix_existing_file(filepath: Path) -> bool:
 
     changed = False
 
+    # Fix edge tensor shapes in splits
     for split in ["train", "valid", "test"]:
         for key in ["edge", "edge_neg"]:
             tensor = splits[split][key]
@@ -291,6 +301,7 @@ def generate_dataset(
     force: bool,
     fix_existing: bool,
 ) -> Tuple[bool, str]:
+    """Generate dataset splits for MORAL and save to disk."""
 
     path = splits_dir / f"{dataset_name}.pt"
 

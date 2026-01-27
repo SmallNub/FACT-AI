@@ -217,7 +217,7 @@ class GroupHeads(nn.Module):
         return scores.view(-1)
 
 
-class EfficientMORAL(nn.Module):
+class SharedBackboneMORAL(nn.Module):
     def __init__(
         self,
         adj: Tensor,

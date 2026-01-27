@@ -15,7 +15,7 @@ from torch_geometric.data import Data
 
 from moral import MORAL
 from moral2 import MORAL_FULL, MORAL_SINGLE, MORAL_IF
-from efficient_moral import EfficientMORAL
+from efficient_moral import SharedBackboneMORAL
 from utils import get_dataset, set_emissions_tracker
 
 
@@ -146,9 +146,9 @@ def parse_args() -> argparse.Namespace:
         help="Whether to use a single model during training.",
     )
     parser.add_argument(
-        "--efficient",
+        "--shared_backbone",
         action="store_true",
-        help="Whether to use the efficient MORAL variant.",
+        help="Whether to use the shared backbone MORAL variant.",
     )
     parser.add_argument(
         "--individual",
@@ -263,9 +263,9 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
             device=args.device,
             patience=args.patience
         )
-    elif args.efficient:
-        logger.info("USING EFFICIENT MORAL")
-        model = EfficientMORAL(
+    elif args.shared_backbone:
+        logger.info("USING SHARED BACKBONE MORAL")
+        model = SharedBackboneMORAL(
             adj=adj,
             features=features,
             # idx_train=idx_train.long(),
