@@ -16,9 +16,9 @@ source activate FACT
 
 set -euo pipefail
 
-srun python main.py --fair_model moral --model gae --dataset credit --device cuda:0 --epochs 500 --track_emissions --emissions_dir "emissions_SB_MORAL/" --results_dir "results_SB_MORAL/" --amp --shared_backbone --num_layers 1 --skip_bottleneck
-srun python main.py --fair_model moral --model gae --dataset german --device cuda:0 --epochs 500 --track_emissions --emissions_dir "emissions_SB_MORAL/" --results_dir "results_SB_MORAL/" --amp --shared_backbone --num_layers 1 --skip_bottleneck
-srun python main.py --fair_model moral --model gae --dataset nba --device cuda:0 --epochs 500 --track_emissions --emissions_dir "emissions_SB_MORAL/" --results_dir "results_SB_MORAL/" --amp --shared_backbone --num_layers 1 --skip_bottleneck
-srun python main.py --fair_model moral --model gae --dataset facebook --device cuda:0 --epochs 500 --track_emissions --emissions_dir "emissions_SB_MORAL/" --results_dir "results_SB_MORAL/" --amp --shared_backbone --num_layers 1 --skip_bottleneck
-srun python main.py --fair_model moral --model gae --dataset pokec_n --device cuda:0 --epochs 500 --track_emissions --emissions_dir "emissions_SB_MORAL/" --results_dir "results_SB_MORAL/" --amp --shared_backbone --num_layers 1 --skip_bottleneck
-srun python main.py --fair_model moral --model gae --dataset pokec_z --device cuda:0 --epochs 500 --track_emissions --emissions_dir "emissions_SB_MORAL/" --results_dir "results_SB_MORAL/" --amp --shared_backbone --num_layers 1 --skip_bottleneck
+srun python main.py --fair_model moral --model gae --dataset credit --device cuda:0 --epochs 500 --track_emissions --emissions_dir "emissions_SB_MORAL/" --results_dir "results_SB_MORAL/" --amp --shared_backbone --num_layers 1 --skip_bottleneck --accum_steps 10000
+srun python main.py --fair_model moral --model gae --dataset german --device cuda:0 --epochs 500 --track_emissions --emissions_dir "emissions_SB_MORAL/" --results_dir "results_SB_MORAL/" --amp --shared_backbone --num_layers 1 --skip_bottleneck --accum_steps 10000
+srun python main.py --fair_model moral --model gae --dataset nba --device cuda:0 --epochs 500 --track_emissions --emissions_dir "emissions_SB_MORAL/" --results_dir "results_SB_MORAL/" --amp --shared_backbone --num_layers 1 --skip_bottleneck --accum_steps 10000
+srun python main.py --fair_model moral --model gae --dataset facebook --device cuda:0 --epochs 500 --track_emissions --emissions_dir "emissions_SB_MORAL/" --results_dir "results_SB_MORAL/" --amp --shared_backbone --num_layers 1 --skip_bottleneck --accum_steps 10000
+srun python main.py --fair_model moral --model gae --dataset pokec_n --device cuda:0 --epochs 500 --track_emissions --emissions_dir "emissions_SB_MORAL/" --results_dir "results_SB_MORAL/" --amp --shared_backbone --num_layers 1 --skip_bottleneck --accum_steps 10000
+srun python main.py --fair_model moral --model gae --dataset pokec_z --device cuda:0 --epochs 500 --track_emissions --emissions_dir "emissions_SB_MORAL/" --results_dir "results_SB_MORAL/" --amp --shared_backbone --num_layers 1 --skip_bottleneck --accum_steps 10000

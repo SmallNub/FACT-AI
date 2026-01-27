@@ -15,7 +15,7 @@ from torch_geometric.data import Data
 
 from moral import MORAL
 from moral2 import MORAL_FULL, MORAL_SINGLE, MORAL_IF
-from MORAL.moral_sb import SharedBackboneMORAL
+from moral_sb import SharedBackboneMORAL
 from utils import get_dataset, set_emissions_tracker
 
 
@@ -125,7 +125,7 @@ def parse_args() -> argparse.Namespace:
         "--patience", type=int, default=5, help="Patience for early stopping."
     )
     parser.add_argument(
-        "--accum", type=int, default=1, help="Number of accumulation steps."
+        "--accum_steps", type=int, default=1, help="Number of accumulation steps."
     )
     parser.add_argument(
         "--num_layers", type=int, default=3, help="Number of layers in the model."
@@ -281,7 +281,7 @@ def run_single(args: argparse.Namespace, run: int, tracker=None) -> None:
             batch_size=args.batch_size,
             device=args.device,
             patience=args.patience,
-            accum_steps=args.accum,
+            accum_steps=args.accum_steps,
             num_layers=args.num_layers,
             use_bottleneck=not args.skip_bottleneck,
         )
