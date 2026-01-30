@@ -595,7 +595,7 @@ def print_detailed_epoch_times(datasets: Dict[str, List[Dict]]):
 
 
 def main():
-    log_file_path = "slurm/moral_early_stop_train_18649179.err"
+    log_file_path = "slurm/sb_moral_train_18781120.err"
 
     try:
         print("Parsing log file...")
