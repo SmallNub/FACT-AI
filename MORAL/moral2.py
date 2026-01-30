@@ -285,12 +285,6 @@ class MORAL_SINGLE(nn.Module):
         encoder.train()
         predictor.train()
 
-        ###
-        # optimizer.zero_grad()
-        # embeddings = encoder(self.features, self.edge_index)
-        # total_loss_batch = 0.0
-        ###
-
         for edges, labels in loader:
             optimizer.zero_grad()
             edges = edges.t().to(self.device)
@@ -298,15 +292,11 @@ class MORAL_SINGLE(nn.Module):
             embeddings = encoder(self.features, self.edge_index)
             logits = predictor(embeddings, edges)
             loss = self.criterion(logits, labels)
-            # total_loss_batch += loss
             loss.backward()
             optimizer.step()
             total_loss += float(loss.item())
             total_batches += 1
-        ###
-        # total_loss_batch.backward()
-        # optimizer.step()
-        ###
+
         return total_loss / max(total_batches, 1)
 
     @torch.no_grad()
@@ -423,23 +413,15 @@ class MORAL_SINGLE(nn.Module):
 
         return float(parity.item()), float(equality.item())
     
-def individual_fairness_loss(
-    embeddings: Tensor,
-    edges: Tensor,
-    preds: Tensor,
-    tau: float = 0.7,
-) -> Tensor:
-    """
-    embeddings: [N, d] node embeddings
-    edges:      [2, E] edge index
-    preds:      [E] predicted logits
-    """
+def individual_fairness_loss(features: Tensor, edges: Tensor, preds: Tensor, threshold: float = 0.7) -> Tensor:
+    """Calculate loss for enforcing individual fairness during training."""
+    
     src, dst = edges
-    edge_emb = torch.cat([embeddings[src], embeddings[dst]], dim=1)  # [E, 2d]
+    edge_emb = torch.cat([features[src], features[dst]], dim=1)
 
     edge_emb = torch.nn.functional.normalize(edge_emb, dim=1)
-    sim = edge_emb @ edge_emb.T                      # [E, E]
-    mask = sim > tau
+    sim = edge_emb @ edge_emb.T
+    mask = sim > threshold
 
     diff = preds.unsqueeze(1) - preds.unsqueeze(0)
     loss = (diff ** 2 * mask.float()).sum()
