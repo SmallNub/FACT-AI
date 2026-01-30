@@ -14,7 +14,7 @@ from loguru import logger
 from torch_geometric.data import Data
 
 from moral import MORAL
-from moral2 import MORAL_FULL, MORAL_SINGLE, MORAL_IF
+from moral_variants import MORAL_FULL, MORAL_SINGLE, MORAL_IF
 from moral_sb import SharedBackboneMORAL
 from utils import get_dataset, set_emissions_tracker
 

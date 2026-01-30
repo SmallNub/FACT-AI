@@ -22,27 +22,13 @@ from torch.utils.data import DataLoader
 
 from moral import *
 
-# (
-#     MORAL,
-#     EdgeLabelDataset,
-#     build_encoder,
-#     build_predictor,
-#     normalize_features,
-# )
-
 from utils import log_system_usage
 
 NUM_GROUPS = 3
 
 
 class MORAL_FULL(MORAL):
-    """Main MORAL model.
-
-    The model keeps one encoder/decoder pair for each of the three sensitive
-    attribute combinations (00, 01, 11).  During training we sample balanced
-    batches within each group which ensures that the model is not dominated by
-    the majority group.
-    """
+    """Full Graph version of MORAL."""
 
     def __init__(
         self,
@@ -159,13 +145,7 @@ class MORAL_FULL(MORAL):
         return total_loss / max(total_batches, 1)
 
 class MORAL_SINGLE(nn.Module):
-    """Main MORAL model.
-
-    The model keeps one encoder/decoder pair for each of the three sensitive
-    attribute combinations (00, 01, 11).  During training we sample balanced
-    batches within each group which ensures that the model is not dominated by
-    the majority group.
-    """
+    """Single Model version of MORAL."""
 
     def __init__(
         self,
@@ -413,11 +393,11 @@ class MORAL_SINGLE(nn.Module):
 
         return float(parity.item()), float(equality.item())
     
-def individual_fairness_loss(features: Tensor, edges: Tensor, preds: Tensor, threshold: float = 0.7) -> Tensor:
+def individual_fairness_loss(embeddings: Tensor, edges: Tensor, preds: Tensor, threshold: float = 0.7) -> Tensor:
     """Calculate loss for enforcing individual fairness during training."""
     
     src, dst = edges
-    edge_emb = torch.cat([features[src], features[dst]], dim=1)
+    edge_emb = torch.cat([embeddings[src], embeddings[dst]], dim=1)
 
     edge_emb = torch.nn.functional.normalize(edge_emb, dim=1)
     sim = edge_emb @ edge_emb.T
@@ -428,13 +408,7 @@ def individual_fairness_loss(features: Tensor, edges: Tensor, preds: Tensor, thr
     return loss / mask.sum().clamp(min=1)
 
 class MORAL_IF(MORAL):
-    """Main MORAL model.
-
-    The model keeps one encoder/decoder pair for each of the three sensitive
-    attribute combinations (00, 01, 11).  During training we sample balanced
-    batches within each group which ensures that the model is not dominated by
-    the majority group.
-    """
+    """MORAL with individual fairness loss."""
 
     def __init__(
         self,
